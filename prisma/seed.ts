@@ -19,9 +19,11 @@ async function main() {
 
   console.log("Created user:", user.name);
 
-  // Clear existing tasks for clean seed
+  // Clear existing data for clean seed
   await prisma.timeBlock.deleteMany({ where: { task: { userId: user.id } } });
+  await prisma.subtask.deleteMany({ where: { task: { userId: user.id } } });
   await prisma.task.deleteMany({ where: { userId: user.id } });
+  await prisma.recurringBlock.deleteMany({ where: { userId: user.id } });
 
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 }); // Monday
 
@@ -50,6 +52,23 @@ async function main() {
   }
 
   console.log(`Seeded ${tasks.length} tasks`);
+
+  // Sample recurring blocks
+  const recurringBlocks = [
+    { title: "Lunch Break", startTime: "12:00", endTime: "13:00", daysOfWeek: "0,1,2,3,4", color: "#FDE68A" },
+    { title: "Gym", startTime: "07:00", endTime: "08:00", daysOfWeek: "0,2,4", color: "#A7F3D0" },
+  ];
+
+  for (const block of recurringBlocks) {
+    await prisma.recurringBlock.create({
+      data: {
+        ...block,
+        userId: user.id,
+      },
+    });
+  }
+
+  console.log(`Seeded ${recurringBlocks.length} recurring blocks`);
 }
 
 main()

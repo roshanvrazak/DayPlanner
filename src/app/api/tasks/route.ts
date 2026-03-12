@@ -15,6 +15,7 @@ export async function GET(request: Request) {
       },
       include: {
         timeBlocks: true,
+        subtasks: { orderBy: { order: "asc" } },
       },
       orderBy: [
         { deadline: { sort: "asc", nulls: "last" } },
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { title, duration, priority, deadline, userId } = body;
+    const { title, duration, priority, deadline, notes, subtasks, userId } = body;
 
     const task = await prisma.task.create({
       data: {
@@ -41,9 +42,19 @@ export async function POST(request: Request) {
         duration: parseInt(duration),
         priority: parseInt(priority) || 2,
         deadline: deadline ? new Date(deadline) : null,
+        notes: notes || null,
         userId: userId || "default-user",
         status: "BACKLOG",
+        ...(subtasks?.length > 0 && {
+          subtasks: {
+            create: subtasks.map((s: { title: string }, i: number) => ({
+              title: s.title,
+              order: i,
+            })),
+          },
+        }),
       },
+      include: { subtasks: { orderBy: { order: "asc" } } },
     });
 
     return NextResponse.json(task, { status: 201 });

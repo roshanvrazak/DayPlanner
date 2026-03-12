@@ -1,15 +1,15 @@
 #!/bin/sh
 set -e
 
-echo "🔄 Running Prisma db push..."
-npx prisma db push --skip-generate 2>/dev/null || {
-  echo "⚠️  Prisma db push failed, retrying in 3 seconds..."
+echo "🔄 Pushing database schema..."
+./node_modules/.bin/prisma db push --skip-generate --accept-data-loss 2>&1 || {
+  echo "⚠️  Retrying in 3s..."
   sleep 3
-  npx prisma db push --skip-generate
+  ./node_modules/.bin/prisma db push --skip-generate --accept-data-loss 2>&1
 }
 
 echo "🌱 Seeding database..."
-npx prisma db seed 2>/dev/null || echo "⚠️  Seed skipped (may already exist)"
+npx prisma db seed 2>&1
 
-echo "🚀 Starting application..."
+echo "🚀 Starting DayPlanner..."
 exec "$@"

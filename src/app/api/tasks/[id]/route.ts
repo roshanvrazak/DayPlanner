@@ -20,7 +20,9 @@ export async function PATCH(
           deadline: body.deadline ? new Date(body.deadline) : null,
         }),
         ...(body.status !== undefined && { status: body.status }),
+        ...(body.notes !== undefined && { notes: body.notes || null }),
       },
+      include: { subtasks: { orderBy: { order: "asc" } } },
     });
 
     return NextResponse.json(task);

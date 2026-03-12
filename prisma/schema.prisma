@@ -17,14 +17,15 @@ enum TaskStatus {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  name         String   @default("Default User")
-  dayStartTime String   @default("09:00") // HH:mm format
-  dayEndTime   String   @default("17:00") // HH:mm format
-  strictMode   Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  tasks        Task[]
+  id              String           @id @default(cuid())
+  name            String           @default("Default User")
+  dayStartTime    String           @default("09:00") // HH:mm format
+  dayEndTime      String           @default("17:00") // HH:mm format
+  strictMode      Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  tasks           Task[]
+  recurringBlocks RecurringBlock[]
 }
 
 model Task {
@@ -33,15 +34,45 @@ model Task {
   duration   Int        // in minutes
   priority   Int        @default(2) // 1=High, 2=Medium, 3=Low
   deadline   DateTime?
+  notes      String?
   status     TaskStatus @default(BACKLOG)
   userId     String
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   timeBlocks TimeBlock[]
+  subtasks   Subtask[]
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
   @@index([userId, status])
   @@index([deadline])
+}
+
+model Subtask {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  title     String
+  completed Boolean  @default(false)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId, order])
+}
+
+model RecurringBlock {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  startTime  String   // HH:mm format
+  endTime    String   // HH:mm format
+  daysOfWeek String   // comma-separated "0,1,2,3,4,5,6" (0=Monday)
+  color      String?  // hex color
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model TimeBlock {

@@ -129,15 +129,36 @@ export async function runScheduler(userId: string): Promise<GeneratedBlock[]> {
     select: { startTime: true, endTime: true },
   });
 
+  // Fetch recurring blocks to treat as occupied time
+  const recurringBlocks = await prisma.recurringBlock.findMany({
+    where: { userId },
+  });
+
   // Build per-day free slots
   const allFreeSlots: TimeSlot[] = [];
   for (const day of days) {
     const window = getDayWindow(day, user.dayStartTime, user.dayEndTime);
+    // dayOfWeek: 0=Monday matching weekStartsOn:1
+    const dayOfWeek = (day.getDay() + 6) % 7;
+
+    // Convert recurring blocks for this day into occupied slots
+    const recurringOccupied = recurringBlocks
+      .filter((rb) => rb.daysOfWeek.split(",").map(Number).includes(dayOfWeek))
+      .map((rb) => {
+        const rbStart = parseTime(rb.startTime);
+        const rbEnd = parseTime(rb.endTime);
+        return {
+          startTime: setMinutes(setHours(startOfDay(day), rbStart.hours), rbStart.minutes),
+          endTime: setMinutes(setHours(startOfDay(day), rbEnd.hours), rbEnd.minutes),
+        };
+      });
+
     const dayBlocks = existingBlocks.filter(
       (b) =>
         b.startTime >= startOfDay(day) && b.startTime < endOfDay(day)
     );
-    const freeSlots = calculateFreeSlots(window, dayBlocks);
+    const allOccupied = [...dayBlocks, ...recurringOccupied];
+    const freeSlots = calculateFreeSlots(window, allOccupied);
     allFreeSlots.push(...freeSlots);
   }
 

@@ -23,7 +23,9 @@ export async function GET(request: Request) {
         endTime: { lte: end },
       },
       include: {
-        task: true,
+        task: {
+          include: { subtasks: { orderBy: { order: "asc" } } },
+        },
       },
       orderBy: { startTime: "asc" },
     });

@@ -30,17 +30,19 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy built application
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-# Copy Prisma schema and seed for migrations
+# Copy Prisma files for db push at startup
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/package.json ./package.json
 
-# Copy entrypoint script
+# Install prisma in runner to ensure all dependencies (like 'effect') are present
+RUN npm install prisma @prisma/client date-fns tsx
+
+# Copy built standalone application
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+# Copy entrypoint
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 

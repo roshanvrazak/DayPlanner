@@ -2,7 +2,23 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { format, isSameDay, isToday } from "date-fns";
+import { useDroppable } from "@dnd-kit/core";
 import TaskCard from "./TaskCard";
+
+function DroppableDay({ id, children, className }: { id: string; children: React.ReactNode; className?: string }) {
+  const { isOver, setNodeRef } = useDroppable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`${className || ""} transition-all duration-200 ${
+        isOver ? "ring-2 ring-violet-300 bg-violet-50/30" : ""
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
 
 interface TimeBlockWithTask {
   id: string;
@@ -21,9 +37,19 @@ interface TimeBlockWithTask {
   };
 }
 
+interface RecurringBlockDisplay {
+  id: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  color: string | null;
+  daysOfWeek: string;
+}
+
 interface WeeklyViewProps {
   days: Date[];
   timeBlocks: TimeBlockWithTask[];
+  recurringBlocks: RecurringBlockDisplay[];
   todayLocked: boolean;
   onFocusClick: (blockId: string, title: string, duration: number) => void;
   onComplete: (blockId: string) => void;
@@ -32,6 +58,7 @@ interface WeeklyViewProps {
 export default function WeeklyView({
   days,
   timeBlocks,
+  recurringBlocks,
   todayLocked,
   onFocusClick,
   onComplete,
@@ -42,21 +69,29 @@ export default function WeeklyView({
     );
   };
 
+  const getRecurringBlocksForDay = (day: Date) => {
+    const dayOfWeek = (day.getDay() + 6) % 7; // 0=Monday
+    return recurringBlocks.filter((rb) =>
+      rb.daysOfWeek.split(",").map(Number).includes(dayOfWeek)
+    );
+  };
+
   return (
-    <div className="grid grid-cols-7 gap-3 flex-1 min-h-0">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 flex-1 min-h-0">
       {days.map((day, index) => {
         const dayBlocks = getBlocksForDay(day);
+        const dayRecurring = getRecurringBlocksForDay(day);
         const isCurrentDay = isToday(day);
         const isLockedDay = isCurrentDay && todayLocked;
 
         return (
+          <DroppableDay key={day.toISOString()} id={day.toISOString().split("T")[0]}>
           <motion.div
-            key={day.toISOString()}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05, duration: 0.4 }}
             className={`
-              flex flex-col rounded-2xl p-3 min-h-0
+              flex flex-col rounded-2xl p-3 min-h-0 h-full
               ${isCurrentDay
                 ? "bg-white ring-2 ring-violet-200/60 card-shadow-hover"
                 : "bg-white/60 card-shadow"
@@ -98,6 +133,23 @@ export default function WeeklyView({
 
             {/* Time blocks */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
+              {/* Recurring blocks */}
+              {dayRecurring.map((rb) => (
+                <div
+                  key={rb.id}
+                  className="rounded-xl px-3 py-2 border border-dashed"
+                  style={{
+                    backgroundColor: rb.color ? `${rb.color}30` : "#F5F5F430",
+                    borderColor: rb.color ? `${rb.color}80` : "#D6D3D180",
+                  }}
+                >
+                  <p className="text-[11px] font-semibold text-stone-500">{rb.title}</p>
+                  <p className="text-[10px] text-stone-400">
+                    {rb.startTime} - {rb.endTime}
+                  </p>
+                </div>
+              ))}
+
               <AnimatePresence mode="popLayout">
                 {dayBlocks.length > 0 ? (
                   dayBlocks.map((block) => (
@@ -118,7 +170,7 @@ export default function WeeklyView({
                       onComplete={onComplete}
                     />
                   ))
-                ) : (
+                ) : dayRecurring.length === 0 ? (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -127,7 +179,7 @@ export default function WeeklyView({
                   >
                     <p className="text-xs">No blocks</p>
                   </motion.div>
-                )}
+                ) : null}
               </AnimatePresence>
             </div>
 
@@ -148,6 +200,7 @@ export default function WeeklyView({
               </div>
             )}
           </motion.div>
+          </DroppableDay>
         );
       })}
     </div>
