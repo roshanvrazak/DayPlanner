@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --color-pastel-red: #FCA5A5;
+  --color-pastel-yellow: #FDE68A;
+  --color-pastel-gray: #E5E7EB;
+  --color-surface: #FAFAF9;
+  --color-surface-elevated: #FFFFFF;
+  --color-surface-hover: #F5F5F4;
+  --color-text-primary: #1C1917;
+  --color-text-secondary: #78716C;
+  --color-text-muted: #A8A29E;
+  --color-border-soft: #E7E5E4;
+  --color-accent: #8B5CF6;
+  --color-accent-light: #C4B5FD;
+  --color-streak-gold: #F59E0B;
+  --font-sans: "Inter", "Outfit", system-ui, -apple-system, sans-serif;
+}
+
+/* Base styles */
+body {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-soft);
+  border-radius: 3px;
+}
+
+/* Focus mode backdrop */
+.focus-backdrop {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Weightless card shadow */
+.card-shadow {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.card-shadow-hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+
+/* Gentle gradient backgrounds */
+.gradient-subtle {
+  background: linear-gradient(135deg, #FAFAF9 0%, #F5F5F4 100%);
+}
+
+/* Timer ring animation */
+@keyframes timer-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.timer-pulse {
+  animation: timer-pulse 2s ease-in-out infinite;
+}

@@ -1,0 +1,60 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  BACKLOG
+  SCHEDULED
+  COMPLETED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String   @default("Default User")
+  dayStartTime String   @default("09:00") // HH:mm format
+  dayEndTime   String   @default("17:00") // HH:mm format
+  strictMode   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tasks        Task[]
+}
+
+model Task {
+  id         String     @id @default(cuid())
+  title      String
+  duration   Int        // in minutes
+  priority   Int        @default(2) // 1=High, 2=Medium, 3=Low
+  deadline   DateTime?
+  status     TaskStatus @default(BACKLOG)
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeBlocks TimeBlock[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([userId, status])
+  @@index([deadline])
+}
+
+model TimeBlock {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  startTime DateTime
+  endTime   DateTime
+  isLocked  Boolean  @default(false)
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([startTime, endTime])
+}
