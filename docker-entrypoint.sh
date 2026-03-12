@@ -9,7 +9,7 @@ echo "🔄 Pushing database schema..."
 }
 
 echo "🌱 Seeding database..."
-npx prisma db seed 2>&1
+./node_modules/.bin/prisma db seed 2>&1
 
 echo "🚀 Starting DayPlanner..."
 exec "$@"

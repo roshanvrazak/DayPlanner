@@ -34,11 +34,11 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 
-# Install prisma in runner to ensure all dependencies (like 'effect') are present
-RUN npm install prisma @prisma/client date-fns tsx
-
 # Copy built standalone application
 COPY --from=builder /app/.next/standalone ./
+
+# Install tsx globally for seed script
+RUN npm install -g tsx
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
