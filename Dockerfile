@@ -37,8 +37,13 @@ COPY --from=builder /app/package.json ./package.json
 # Copy built standalone application
 COPY --from=builder /app/.next/standalone ./
 
-# Install tsx globally for seed script
-RUN npm install -g tsx
+# Copy packages needed by the seed script (not included in standalone)
+COPY --from=builder /app/node_modules/date-fns ./node_modules/date-fns
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
+# Install prisma and tsx globally for entrypoint scripts
+RUN npm install -g tsx prisma@6
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
