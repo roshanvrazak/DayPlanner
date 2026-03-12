@@ -11,7 +11,7 @@ interface Subtask {
 
 interface FocusModeProps {
   isOpen: boolean;
-  blockId: string;
+  blockId: string | null;
   taskTitle: string;
   durationMinutes: number;
   notes?: string | null;
@@ -35,15 +35,15 @@ export default function FocusMode({
   const [isCompleted, setIsCompleted] = useState(false);
   const [localSubtasks, setLocalSubtasks] = useState<Subtask[]>(subtasks);
 
-  // Reset timer when opening with new task
+  // Reset timer only when switching to a different task (blockId changes).
+  // Re-opening the same task preserves the timer state.
   useEffect(() => {
-    if (isOpen) {
-      setSecondsLeft(durationMinutes * 60);
-      setIsRunning(false);
-      setIsCompleted(false);
-      setLocalSubtasks(subtasks);
-    }
-  }, [isOpen, durationMinutes, blockId, subtasks]);
+    setSecondsLeft(durationMinutes * 60);
+    setIsRunning(false);
+    setIsCompleted(false);
+    setLocalSubtasks(subtasks);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockId]);
 
   // Countdown logic
   useEffect(() => {
@@ -74,7 +74,7 @@ export default function FocusMode({
   const strokeDashoffset = circumference * (1 - progress);
 
   const handleComplete = useCallback(() => {
-    onComplete(blockId);
+    if (blockId) onComplete(blockId);
     onClose();
   }, [blockId, onComplete, onClose]);
 
@@ -305,7 +305,7 @@ export default function FocusMode({
                 }
               `}
             >
-              {isCompleted ? "Complete!" : "Complete"}
+              {isCompleted ? (blockId ? "Complete!" : "Done!") : blockId ? "Complete" : "Done"}
             </motion.button>
           </motion.div>
         </motion.div>

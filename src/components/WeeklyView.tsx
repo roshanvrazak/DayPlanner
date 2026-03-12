@@ -46,12 +46,18 @@ interface RecurringBlockDisplay {
   daysOfWeek: string;
 }
 
+function recurringDurationMins(startTime: string, endTime: string): number {
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  return eh * 60 + em - (sh * 60 + sm);
+}
+
 interface WeeklyViewProps {
   days: Date[];
   timeBlocks: TimeBlockWithTask[];
   recurringBlocks: RecurringBlockDisplay[];
   todayLocked: boolean;
-  onFocusClick: (blockId: string, title: string, duration: number) => void;
+  onFocusClick: (blockId: string | null, title: string, duration: number) => void;
   onComplete: (blockId: string) => void;
 }
 
@@ -135,9 +141,13 @@ export default function WeeklyView({
             <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
               {/* Recurring blocks */}
               {dayRecurring.map((rb) => (
-                <div
+                <button
                   key={rb.id}
-                  className="rounded-xl px-3 py-2 border border-dashed"
+                  onClick={() =>
+                    onFocusClick(null, rb.title, recurringDurationMins(rb.startTime, rb.endTime))
+                  }
+                  className="w-full text-left rounded-xl px-3 py-2 border border-dashed
+                             hover:brightness-95 transition-all duration-150 cursor-pointer"
                   style={{
                     backgroundColor: rb.color ? `${rb.color}30` : "#F5F5F430",
                     borderColor: rb.color ? `${rb.color}80` : "#D6D3D180",
@@ -147,7 +157,7 @@ export default function WeeklyView({
                   <p className="text-[10px] text-stone-400">
                     {rb.startTime} - {rb.endTime}
                   </p>
-                </div>
+                </button>
               ))}
 
               <AnimatePresence mode="popLayout">

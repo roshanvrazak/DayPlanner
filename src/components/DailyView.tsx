@@ -68,7 +68,7 @@ interface DailyViewProps {
   timeBlocks: TimeBlockWithTask[];
   recurringBlocks: RecurringBlock[];
   todayLocked: boolean;
-  onFocusClick: (blockId: string, title: string, duration: number) => void;
+  onFocusClick: (blockId: string | null, title: string, duration: number) => void;
   onComplete: (blockId: string) => void;
 }
 
@@ -216,10 +216,13 @@ export default function DailyView({
             {dayRecurring.map((rb) => {
               const top = getRecurringTopPx(rb.startTime);
               const height = getRecurringHeightPx(rb.startTime, rb.endTime);
+              const duration = timeStrToMinutes(rb.endTime) - timeStrToMinutes(rb.startTime);
               return (
-                <div
+                <button
                   key={rb.id}
-                  className="absolute left-1 right-1 rounded-lg px-2 py-1 border border-dashed"
+                  onClick={() => onFocusClick(null, rb.title, duration)}
+                  className="absolute left-1 right-1 rounded-lg px-2 py-1 border border-dashed
+                             text-left hover:brightness-95 transition-all duration-150 cursor-pointer"
                   style={{
                     top: Math.max(0, top),
                     height: Math.max(height, 22),
@@ -233,7 +236,7 @@ export default function DailyView({
                       {rb.startTime}–{rb.endTime}
                     </p>
                   )}
-                </div>
+                </button>
               );
             })}
 

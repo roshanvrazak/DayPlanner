@@ -16,6 +16,13 @@ enum TaskStatus {
   COMPLETED
 }
 
+enum RecurrenceType {
+  DAILY
+  WEEKDAYS
+  WEEKLY
+  MONTHLY
+}
+
 model User {
   id              String           @id @default(cuid())
   name            String           @default("Default User")
@@ -26,22 +33,24 @@ model User {
   updatedAt       DateTime         @updatedAt
   tasks           Task[]
   recurringBlocks RecurringBlock[]
+  recurringTasks  RecurringTask[]
 }
 
 model Task {
-  id         String     @id @default(cuid())
-  title      String
-  duration   Int        // in minutes
-  priority   Int        @default(2) // 1=High, 2=Medium, 3=Low
-  deadline   DateTime?
-  notes      String?
-  status     TaskStatus @default(BACKLOG)
-  userId     String
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  timeBlocks TimeBlock[]
-  subtasks   Subtask[]
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id                String         @id @default(cuid())
+  title             String
+  duration          Int            // in minutes
+  priority          Int            @default(2) // 1=High, 2=Medium, 3=Low
+  deadline          DateTime?
+  notes             String?
+  status            TaskStatus     @default(BACKLOG)
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeBlocks        TimeBlock[]
+  subtasks          Subtask[]
+  recurringTaskId   String?        // source recurring task template
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   @@index([userId, status])
   @@index([deadline])
@@ -88,4 +97,21 @@ model TimeBlock {
 
   @@index([taskId])
   @@index([startTime, endTime])
+}
+
+model RecurringTask {
+  id             String         @id @default(cuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String
+  duration       Int            // in minutes
+  priority       Int            @default(2) // 1=High, 2=Medium, 3=Low
+  notes          String?
+  recurrenceType RecurrenceType
+  recurrenceDays String?        // comma-separated 0-6 (0=Monday) — used for WEEKLY
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([userId])
 }

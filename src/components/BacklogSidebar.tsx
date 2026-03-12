@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDraggable } from "@dnd-kit/core";
 import TaskCard from "./TaskCard";
@@ -51,6 +52,11 @@ export default function BacklogSidebar({
   onDeleteTask,
   draggable,
 }: BacklogSidebarProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredTasks = searchQuery.trim()
+    ? tasks.filter((t) => t.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    : tasks;
+
   return (
     <motion.aside
       initial={{ x: 30, opacity: 0 }}
@@ -118,6 +124,35 @@ export default function BacklogSidebar({
             </div>
           )}
 
+          {/* Search */}
+          <div className="px-4 pb-2">
+            <div className="relative">
+              <svg
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-300 pointer-events-none"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search tasks..."
+                className="w-full pl-7 pr-3 py-1.5 rounded-xl border border-stone-100
+                           bg-stone-50/70 text-xs text-stone-700
+                           placeholder:text-stone-300
+                           focus:outline-none focus:ring-2 focus:ring-violet-100
+                           focus:border-violet-200 transition-all duration-200"
+              />
+            </div>
+          </div>
+
           {/* Action buttons */}
           <div className="px-4 pb-3 flex gap-2">
             <motion.button
@@ -168,8 +203,8 @@ export default function BacklogSidebar({
           {/* Task list */}
           <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
             <AnimatePresence mode="popLayout">
-              {tasks.length > 0 ? (
-                tasks.map((task) => (
+              {filteredTasks.length > 0 ? (
+                filteredTasks.map((task) => (
                   <DraggableWrapper key={task.id} id={task.id} enabled={!!draggable}>
                     <div className="group relative">
                       <TaskCard
@@ -200,13 +235,13 @@ export default function BacklogSidebar({
                   className="flex flex-col items-center justify-center py-12 text-center"
                 >
                   <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center mb-3">
-                    <span className="text-lg">📋</span>
+                    <span className="text-lg">{searchQuery ? "🔍" : "📋"}</span>
                   </div>
                   <p className="text-xs text-stone-400 font-medium">
-                    Backlog empty
+                    {searchQuery ? "No tasks match" : "Backlog empty"}
                   </p>
                   <p className="text-[10px] text-stone-300 mt-1">
-                    Add tasks to get started
+                    {searchQuery ? `"${searchQuery}"` : "Add tasks to get started"}
                   </p>
                 </motion.div>
               )}

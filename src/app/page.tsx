@@ -27,6 +27,7 @@ import FocusMode from "@/components/FocusMode";
 import AddTaskModal from "@/components/AddTaskModal";
 import SettingsModal from "@/components/SettingsModal";
 import RecurringBlocksModal from "@/components/RecurringBlocksModal";
+import RecurringTasksModal from "@/components/RecurringTasksModal";
 import OverrideModal from "@/components/OverrideModal";
 import ReviewModal from "@/components/ReviewModal";
 import DraggableTaskOverlay from "@/components/DragOverlay";
@@ -86,18 +87,19 @@ export default function Home() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurringBlocks, setShowRecurringBlocks] = useState(false);
+  const [showRecurringTasks, setShowRecurringTasks] = useState(false);
   const [showOverride, setShowOverride] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [focusMode, setFocusMode] = useState<{
     isOpen: boolean;
-    blockId: string;
+    blockId: string | null;
     taskTitle: string;
     duration: number;
     notes: string | null;
     subtasks: Subtask[];
-  }>({ isOpen: false, blockId: "", taskTitle: "", duration: 0, notes: null, subtasks: [] });
+  }>({ isOpen: false, blockId: null, taskTitle: "", duration: 0, notes: null, subtasks: [] });
 
   const [activeDragTask, setActiveDragTask] = useState<Task | null>(null);
 
@@ -132,8 +134,16 @@ export default function Home() {
   };
 
   // Fetch all data
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isInitialLoad = false) => {
     try {
+      // On initial load: roll over yesterday's incomplete tasks and generate recurring task instances
+      if (isInitialLoad) {
+        await Promise.all([
+          fetch("/api/rollover", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: "default-user" }) }),
+          fetch("/api/recurring-tasks/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: "default-user" }) }),
+        ]);
+      }
+
       const [tasksRes, blocksRes, lockRes, streakRes, recurringRes] = await Promise.all([
         fetch("/api/tasks?status=BACKLOG"),
         fetch("/api/timeblocks"),
@@ -161,7 +171,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    fetchData(true);
   }, [fetchData]);
 
   // Schedule tasks
@@ -233,8 +243,8 @@ export default function Home() {
   };
 
   // Focus mode
-  const handleFocusClick = (blockId: string, title: string, duration: number) => {
-    const block = timeBlocks.find((b) => b.id === blockId);
+  const handleFocusClick = (blockId: string | null, title: string, duration: number) => {
+    const block = blockId ? timeBlocks.find((b) => b.id === blockId) : null;
     setFocusMode({
       isOpen: true,
       blockId,
@@ -329,6 +339,20 @@ export default function Home() {
                        hover:bg-stone-200 transition-colors duration-200"
           >
             Review
+          </button>
+
+          <button
+            onClick={() => setShowRecurringTasks(true)}
+            className="w-8 h-8 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-400
+                       hover:text-stone-600 flex items-center justify-center transition-colors duration-200"
+            title="Recurring tasks"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="17 1 21 5 17 9" />
+              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+              <polyline points="7 23 3 19 7 15" />
+              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+            </svg>
           </button>
 
           <button
@@ -511,7 +535,7 @@ export default function Home() {
         notes={focusMode.notes}
         subtasks={focusMode.subtasks}
         onClose={() =>
-          setFocusMode({ isOpen: false, blockId: "", taskTitle: "", duration: 0, notes: null, subtasks: [] })
+          setFocusMode({ isOpen: false, blockId: null, taskTitle: "", duration: 0, notes: null, subtasks: [] })
         }
         onComplete={handleComplete}
       />
@@ -520,6 +544,11 @@ export default function Home() {
       <RecurringBlocksModal
         isOpen={showRecurringBlocks}
         onClose={() => setShowRecurringBlocks(false)}
+        onSave={fetchData}
+      />
+      <RecurringTasksModal
+        isOpen={showRecurringTasks}
+        onClose={() => setShowRecurringTasks(false)}
         onSave={fetchData}
       />
       <OverrideModal isOpen={showOverride} onClose={() => setShowOverride(false)} onOverride={fetchData} />
