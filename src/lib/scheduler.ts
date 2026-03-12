@@ -94,16 +94,19 @@ export async function runScheduler(userId: string): Promise<GeneratedBlock[]> {
   // Fetch user settings
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
-  // Fetch backlog tasks sorted by deadline then priority
-  const tasks = await prisma.task.findMany({
-    where: { userId, status: "BACKLOG" },
-    orderBy: [
-      { deadline: { sort: "asc", nulls: "last" } },
-      { priority: "asc" }, // 1 = highest priority first
-    ],
+  // Reset SCHEDULED tasks (whose blocks aren't locked/completed) back to BACKLOG
+  // so they get re-scheduled on each "Plan My Week" run
+  const blocksToDelete = await prisma.timeBlock.findMany({
+    where: { task: { userId }, isLocked: false, completed: false },
+    select: { taskId: true },
   });
-
-  if (tasks.length === 0) return [];
+  const taskIdsToReset = [...new Set(blocksToDelete.map((b) => b.taskId))];
+  if (taskIdsToReset.length > 0) {
+    await prisma.task.updateMany({
+      where: { id: { in: taskIdsToReset }, status: "SCHEDULED" },
+      data: { status: "BACKLOG" },
+    });
+  }
 
   // Delete any existing non-locked, non-completed scheduled blocks for this user
   await prisma.timeBlock.deleteMany({
@@ -113,6 +116,17 @@ export async function runScheduler(userId: string): Promise<GeneratedBlock[]> {
       completed: false,
     },
   });
+
+  // Fetch all backlog tasks (including ones just reset above)
+  const tasks = await prisma.task.findMany({
+    where: { userId, status: "BACKLOG" },
+    orderBy: [
+      { deadline: { sort: "asc", nulls: "last" } },
+      { priority: "asc" }, // 1 = highest priority first
+    ],
+  });
+
+  if (tasks.length === 0) return [];
 
   // Build schedulable inventory for the next 7 days
   const today = startOfWeek(new Date(), { weekStartsOn: 1 });
