@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { UpdateRecurringTaskSchema, formatValidationError } from "@/lib/validations";
 
 // DELETE /api/recurring-tasks/[id]
 export async function DELETE(
@@ -12,7 +13,7 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("RecurringTask DELETE error:", error);
-    return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete recurring task" }, { status: 500 });
   }
 }
 
@@ -24,13 +25,20 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
+
+    const parsed = UpdateRecurringTaskSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
+    }
+
     const task = await prisma.recurringTask.update({
       where: { id },
-      data: { isActive: body.isActive },
+      data: { isActive: parsed.data.isActive },
     });
+
     return NextResponse.json(task);
   } catch (error) {
     console.error("RecurringTask PATCH error:", error);
-    return NextResponse.json({ error: "Failed to update" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update recurring task" }, { status: 500 });
   }
 }

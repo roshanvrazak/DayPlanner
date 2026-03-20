@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay } from "date-fns";
+import { ReviewUpdateSchema, formatValidationError } from "@/lib/validations";
 
 export async function GET(request: Request) {
   try {
@@ -21,17 +22,21 @@ export async function GET(request: Request) {
     return NextResponse.json(blocks);
   } catch (error) {
     console.error("Review GET error:", error);
-    return NextResponse.json([], { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch review data" }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { updates } = body; // Array of { blockId, completed }
+
+    const parsed = ReviewUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
+    }
 
     await prisma.$transaction(
-      updates.map((u: { blockId: string; completed: boolean }) =>
+      parsed.data.updates.map((u) =>
         prisma.timeBlock.update({
           where: { id: u.blockId },
           data: { completed: u.completed },

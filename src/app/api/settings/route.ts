@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { UpdateSettingsSchema, formatValidationError } from "@/lib/validations";
 
 export async function GET(request: Request) {
   try {
@@ -23,15 +24,22 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    const userId = body.userId || "default-user";
+
+    const parsed = UpdateSettingsSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
+    }
+
+    const { name, dayStartTime, dayEndTime, strictMode, userId } = parsed.data;
+    const resolvedUserId = userId || "default-user";
 
     const user = await prisma.user.update({
-      where: { id: userId },
+      where: { id: resolvedUserId },
       data: {
-        ...(body.name !== undefined && { name: body.name }),
-        ...(body.dayStartTime !== undefined && { dayStartTime: body.dayStartTime }),
-        ...(body.dayEndTime !== undefined && { dayEndTime: body.dayEndTime }),
-        ...(body.strictMode !== undefined && { strictMode: body.strictMode }),
+        ...(name !== undefined && { name }),
+        ...(dayStartTime !== undefined && { dayStartTime }),
+        ...(dayEndTime !== undefined && { dayEndTime }),
+        ...(strictMode !== undefined && { strictMode }),
       },
     });
 

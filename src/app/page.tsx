@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import { motion } from "framer-motion";
 import {
   addDays,
@@ -165,6 +166,7 @@ export default function Home() {
       setRecurringBlocks(Array.isArray(recurring) ? recurring : []);
     } catch (error) {
       console.error("Failed to fetch data:", error);
+      toast.error("Failed to load data. Please refresh.");
     } finally {
       setLoading(false);
     }
@@ -177,6 +179,7 @@ export default function Home() {
   // Schedule tasks
   const handlePlanWeek = async () => {
     setIsScheduling(true);
+    const toastId = toast.loading("Planning your week...");
     try {
       const res = await fetch("/api/schedule", {
         method: "POST",
@@ -184,9 +187,15 @@ export default function Home() {
         body: JSON.stringify({ userId: "default-user" }),
       });
       const data = await res.json();
-      if (data.success) await fetchData();
+      if (data.success) {
+        await fetchData();
+        toast.success(`Scheduled ${data.blocksCreated} time blocks`, { id: toastId });
+      } else {
+        toast.error(data.error || "Failed to schedule tasks", { id: toastId });
+      }
     } catch (error) {
       console.error("Failed to schedule:", error);
+      toast.error("Failed to schedule tasks", { id: toastId });
     } finally {
       setIsScheduling(false);
     }
@@ -212,19 +221,33 @@ export default function Home() {
           notes: task.notes || null,
         }),
       });
-      if (res.ok) await fetchData();
+      if (res.ok) {
+        await fetchData();
+        toast.success(`"${task.title}" added to backlog`);
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Failed to create task");
+      }
     } catch (error) {
       console.error("Failed to add task:", error);
+      toast.error("Failed to create task");
     }
   };
 
   // Delete task
   const handleDeleteTask = async (id: string) => {
+    const task = backlogTasks.find((t) => t.id === id);
     try {
       const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
-      if (res.ok) setBacklogTasks((prev) => prev.filter((t) => t.id !== id));
+      if (res.ok) {
+        setBacklogTasks((prev) => prev.filter((t) => t.id !== id));
+        toast.success(`"${task?.title ?? "Task"}" deleted`);
+      } else {
+        toast.error("Failed to delete task");
+      }
     } catch (error) {
       console.error("Failed to delete task:", error);
+      toast.error("Failed to delete task");
     }
   };
 
@@ -236,9 +259,13 @@ export default function Home() {
         setTimeBlocks((prev) =>
           prev.map((b) => (b.id === blockId ? { ...b, completed: true } : b))
         );
+        toast.success("Block marked complete");
+      } else {
+        toast.error("Failed to mark block as complete");
       }
     } catch (error) {
       console.error("Failed to complete block:", error);
+      toast.error("Failed to mark block as complete");
     }
   };
 
@@ -262,6 +289,7 @@ export default function Home() {
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    const task = activeDragTask;
     setActiveDragTask(null);
     const { active, over } = event;
     if (!over) return;
@@ -271,9 +299,16 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ taskId: active.id, date: over.id }),
       });
-      if (res.ok) await fetchData();
+      if (res.ok) {
+        await fetchData();
+        toast.success(`"${task?.title ?? "Task"}" scheduled`);
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "No available slot on this day");
+      }
     } catch (error) {
       console.error("Failed to assign task:", error);
+      toast.error("Failed to assign task");
     }
   };
 

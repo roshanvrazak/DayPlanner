@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { UpdateTaskSchema, formatValidationError } from "@/lib/validations";
 
 // PATCH update a task
 export async function PATCH(
@@ -10,17 +11,22 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    const parsed = UpdateTaskSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
+    }
+
+    const { title, duration, priority, deadline, status, notes } = parsed.data;
+
     const task = await prisma.task.update({
       where: { id },
       data: {
-        ...(body.title !== undefined && { title: body.title }),
-        ...(body.duration !== undefined && { duration: parseInt(body.duration) }),
-        ...(body.priority !== undefined && { priority: parseInt(body.priority) }),
-        ...(body.deadline !== undefined && {
-          deadline: body.deadline ? new Date(body.deadline) : null,
-        }),
-        ...(body.status !== undefined && { status: body.status }),
-        ...(body.notes !== undefined && { notes: body.notes || null }),
+        ...(title !== undefined && { title }),
+        ...(duration !== undefined && { duration }),
+        ...(priority !== undefined && { priority }),
+        ...(deadline !== undefined && { deadline: deadline ? new Date(deadline) : null }),
+        ...(status !== undefined && { status }),
+        ...(notes !== undefined && { notes: notes ?? null }),
       },
       include: { subtasks: { orderBy: { order: "asc" } } },
     });
@@ -28,10 +34,7 @@ export async function PATCH(
     return NextResponse.json(task);
   } catch (error) {
     console.error("Task PATCH error:", error);
-    return NextResponse.json(
-      { error: "Failed to update task" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to update task" }, { status: 500 });
   }
 }
 
@@ -42,15 +45,10 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-
     await prisma.task.delete({ where: { id } });
-
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Task DELETE error:", error);
-    return NextResponse.json(
-      { error: "Failed to delete task" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to delete task" }, { status: 500 });
   }
 }

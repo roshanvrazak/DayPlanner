@@ -1,18 +1,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay } from "date-fns";
+import { OverrideSchema, formatValidationError } from "@/lib/validations";
 
 const CONFIRMATION_PHRASE = "BREAK MY STREAK";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const userId = body.userId || "default-user";
-    const { confirmationPhrase } = body;
+
+    const parsed = OverrideSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
+    }
+
+    const { confirmationPhrase, userId } = parsed.data;
 
     if (confirmationPhrase !== CONFIRMATION_PHRASE) {
       return NextResponse.json(
-        { error: "Incorrect confirmation phrase", requiredPhrase: CONFIRMATION_PHRASE },
+        { error: "Incorrect confirmation phrase" },
         { status: 400 }
       );
     }

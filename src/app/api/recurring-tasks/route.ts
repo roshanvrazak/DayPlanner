@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { CreateRecurringTaskSchema, formatValidationError } from "@/lib/validations";
 
 // GET /api/recurring-tasks
 export async function GET(request: Request) {
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     return NextResponse.json(tasks);
   } catch (error) {
     console.error("RecurringTasks GET error:", error);
-    return NextResponse.json([], { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch recurring tasks" }, { status: 500 });
   }
 }
 
@@ -23,17 +24,23 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { title, duration, priority, notes, recurrenceType, recurrenceDays, userId } = body;
+
+    const parsed = CreateRecurringTaskSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
+    }
+
+    const { title, duration, priority, notes, recurrenceType, recurrenceDays, userId } = parsed.data;
 
     const task = await prisma.recurringTask.create({
       data: {
         title,
-        duration: parseInt(duration),
-        priority: parseInt(priority) || 2,
-        notes: notes || null,
+        duration,
+        priority,
+        notes: notes ?? null,
         recurrenceType,
-        recurrenceDays: recurrenceDays || null,
-        userId: userId || "default-user",
+        recurrenceDays: recurrenceDays ?? null,
+        userId,
       },
     });
 

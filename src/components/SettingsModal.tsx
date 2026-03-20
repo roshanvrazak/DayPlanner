@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -36,10 +37,12 @@ export default function SettingsModal({ isOpen, onClose, onSave }: SettingsModal
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dayStartTime, dayEndTime, strictMode }),
       });
+      toast.success("Settings saved");
       onSave();
       onClose();
     } catch (error) {
       console.error("Failed to save settings:", error);
+      toast.error("Failed to save settings");
     } finally {
       setSaving(false);
     }

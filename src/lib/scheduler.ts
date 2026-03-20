@@ -217,24 +217,24 @@ export async function runScheduler(userId: string): Promise<GeneratedBlock[]> {
     }
   }
 
-  // Save generated blocks to database
+  // Save generated blocks and update statuses atomically to prevent partial writes
   if (generatedBlocks.length > 0) {
-    await prisma.timeBlock.createMany({
-      data: generatedBlocks.map((b) => ({
-        taskId: b.taskId,
-        startTime: b.startTime,
-        endTime: b.endTime,
-        isLocked: false,
-        completed: false,
-      })),
-    });
-
-    // Update task statuses to SCHEDULED
     const scheduledTaskIds = [...new Set(generatedBlocks.map((b) => b.taskId))];
-    await prisma.task.updateMany({
-      where: { id: { in: scheduledTaskIds } },
-      data: { status: "SCHEDULED" },
-    });
+    await prisma.$transaction([
+      prisma.timeBlock.createMany({
+        data: generatedBlocks.map((b) => ({
+          taskId: b.taskId,
+          startTime: b.startTime,
+          endTime: b.endTime,
+          isLocked: false,
+          completed: false,
+        })),
+      }),
+      prisma.task.updateMany({
+        where: { id: { in: scheduledTaskIds } },
+        data: { status: "SCHEDULED" },
+      }),
+    ]);
   }
 
   return generatedBlocks;

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 interface ReviewBlock {
   id: string;
@@ -50,10 +51,12 @@ export default function ReviewModal({ isOpen, onClose, onSave }: ReviewModalProp
           updates: blocks.map((b) => ({ blockId: b.id, completed: b.completed })),
         }),
       });
+      toast.success("Review saved");
       onSave();
       onClose();
     } catch (error) {
       console.error("Failed to save review:", error);
+      toast.error("Failed to save review");
     } finally {
       setSaving(false);
     }

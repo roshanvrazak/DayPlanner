@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { CreateTaskSchema, formatValidationError } from "@/lib/validations";
 
 // GET all tasks for a user
 export async function GET(request: Request) {
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
     return NextResponse.json(tasks);
   } catch (error) {
     console.error("Tasks GET error:", error);
-    return NextResponse.json([], { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
   }
 }
 
@@ -34,20 +35,26 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { title, duration, priority, deadline, notes, subtasks, userId } = body;
+    const parsed = CreateTaskSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
+    }
+
+    const { title, duration, priority, deadline, notes, subtasks, userId } = parsed.data;
 
     const task = await prisma.task.create({
       data: {
         title,
-        duration: parseInt(duration),
-        priority: parseInt(priority) || 2,
+        duration,
+        priority,
         deadline: deadline ? new Date(deadline) : null,
-        notes: notes || null,
-        userId: userId || "default-user",
+        notes: notes ?? null,
+        userId,
         status: "BACKLOG",
-        ...(subtasks?.length > 0 && {
+        ...(subtasks.length > 0 && {
           subtasks: {
-            create: subtasks.map((s: { title: string }, i: number) => ({
+            create: subtasks.map((s, i) => ({
               title: s.title,
               order: i,
             })),
@@ -60,9 +67,6 @@ export async function POST(request: Request) {
     return NextResponse.json(task, { status: 201 });
   } catch (error) {
     console.error("Tasks POST error:", error);
-    return NextResponse.json(
-      { error: "Failed to create task" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create task" }, { status: 500 });
   }
 }

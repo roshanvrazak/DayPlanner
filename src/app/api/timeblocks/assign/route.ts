@@ -10,12 +10,18 @@ import {
   isAfter,
   isBefore,
 } from "date-fns";
+import { AssignTaskSchema, formatValidationError } from "@/lib/validations";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { taskId, date } = body;
-    const userId = body.userId || "default-user";
+
+    const parsed = AssignTaskSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
+    }
+
+    const { taskId, date, userId } = parsed.data;
 
     const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -41,11 +47,7 @@ export async function POST(request: Request) {
     let cursor = dayStart;
     let blockStart: Date | null = null;
 
-    const sorted = existingBlocks.sort(
-      (a, b) => a.startTime.getTime() - b.startTime.getTime()
-    );
-
-    for (const block of sorted) {
+    for (const block of existingBlocks) {
       const gap = differenceInMinutes(block.startTime, cursor);
       if (gap >= task.duration) {
         blockStart = cursor;

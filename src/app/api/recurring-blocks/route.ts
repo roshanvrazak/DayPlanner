@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { CreateRecurringBlockSchema, formatValidationError } from "@/lib/validations";
 
 export async function GET(request: Request) {
   try {
@@ -14,14 +15,20 @@ export async function GET(request: Request) {
     return NextResponse.json(blocks);
   } catch (error) {
     console.error("RecurringBlocks GET error:", error);
-    return NextResponse.json([], { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch recurring blocks" }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { title, startTime, endTime, daysOfWeek, color, userId } = body;
+
+    const parsed = CreateRecurringBlockSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
+    }
+
+    const { title, startTime, endTime, daysOfWeek, color, userId } = parsed.data;
 
     const block = await prisma.recurringBlock.create({
       data: {
@@ -29,8 +36,8 @@ export async function POST(request: Request) {
         startTime,
         endTime,
         daysOfWeek,
-        color: color || null,
-        userId: userId || "default-user",
+        color: color ?? null,
+        userId,
       },
     });
 

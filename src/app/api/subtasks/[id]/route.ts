@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { UpdateSubtaskSchema, formatValidationError } from "@/lib/validations";
 
 export async function PATCH(
   request: Request,
@@ -9,11 +10,16 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    const parsed = UpdateSubtaskSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
+    }
+
     const subtask = await prisma.subtask.update({
       where: { id },
       data: {
-        ...(body.completed !== undefined && { completed: body.completed }),
-        ...(body.title !== undefined && { title: body.title }),
+        ...(parsed.data.completed !== undefined && { completed: parsed.data.completed }),
+        ...(parsed.data.title !== undefined && { title: parsed.data.title }),
       },
     });
 
