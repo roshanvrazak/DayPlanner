@@ -1,12 +1,16 @@
+import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CreateRecurringBlockSchema, formatValidationError } from "@/lib/validations";
 
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId") || "default-user";
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
 
+  try {
     const blocks = await prisma.recurringBlock.findMany({
       where: { userId },
       orderBy: { startTime: "asc" },
@@ -20,15 +24,21 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
+
   try {
     const body = await request.json();
 
-    const parsed = CreateRecurringBlockSchema.safeParse(body);
+    const parsed = CreateRecurringBlockSchema.safeParse({ ...body, userId });
     if (!parsed.success) {
       return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
     }
 
-    const { title, startTime, endTime, daysOfWeek, color, userId } = parsed.data;
+    const { title, startTime, endTime, daysOfWeek, color } = parsed.data;
 
     const block = await prisma.recurringBlock.create({
       data: {

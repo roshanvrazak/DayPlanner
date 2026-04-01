@@ -2,11 +2,18 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay } from "date-fns";
 import { OverrideSchema, formatValidationError } from "@/lib/validations";
+import { auth } from "@/auth";
 
 const CONFIRMATION_PHRASE = "BREAK MY STREAK";
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
     const body = await request.json();
 
     const parsed = OverrideSchema.safeParse(body);
@@ -14,7 +21,7 @@ export async function POST(request: Request) {
       return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
     }
 
-    const { confirmationPhrase, userId } = parsed.data;
+    const { confirmationPhrase } = parsed.data;
 
     if (confirmationPhrase !== CONFIRMATION_PHRASE) {
       return NextResponse.json(

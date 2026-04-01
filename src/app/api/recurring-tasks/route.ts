@@ -1,13 +1,17 @@
+import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CreateRecurringTaskSchema, formatValidationError } from "@/lib/validations";
 
 // GET /api/recurring-tasks
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId") || "default-user";
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
 
+  try {
     const tasks = await prisma.recurringTask.findMany({
       where: { userId, isActive: true },
       orderBy: { createdAt: "asc" },
@@ -22,15 +26,21 @@ export async function GET(request: Request) {
 
 // POST /api/recurring-tasks
 export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
+
   try {
     const body = await request.json();
 
-    const parsed = CreateRecurringTaskSchema.safeParse(body);
+    const parsed = CreateRecurringTaskSchema.safeParse({ ...body, userId });
     if (!parsed.success) {
       return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
     }
 
-    const { title, duration, priority, notes, recurrenceType, recurrenceDays, userId } = parsed.data;
+    const { title, duration, priority, notes, recurrenceType, recurrenceDays } = parsed.data;
 
     const task = await prisma.recurringTask.create({
       data: {

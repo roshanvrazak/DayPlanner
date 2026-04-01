@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { UpdateSubtaskSchema, formatValidationError } from "@/lib/validations";
@@ -6,6 +7,12 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
+
   try {
     const { id } = await params;
     const body = await request.json();
@@ -15,14 +22,23 @@ export async function PATCH(
       return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
     }
 
-    const subtask = await prisma.subtask.update({
-      where: { id },
+    // Ensure subtask belongs to user via task
+    const result = await prisma.subtask.updateMany({
+      where: {
+        id,
+        task: { userId },
+      },
       data: {
         ...(parsed.data.completed !== undefined && { completed: parsed.data.completed }),
         ...(parsed.data.title !== undefined && { title: parsed.data.title }),
       },
     });
 
+    if (result.count === 0) {
+      return NextResponse.json({ error: "Subtask not found or unauthorized" }, { status: 404 });
+    }
+
+    const subtask = await prisma.subtask.findUnique({ where: { id } });
     return NextResponse.json(subtask);
   } catch (error) {
     console.error("Subtask PATCH error:", error);
@@ -31,12 +47,29 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
+
   try {
     const { id } = await params;
-    await prisma.subtask.delete({ where: { id } });
+    // Ensure subtask belongs to user via task
+    const result = await prisma.subtask.deleteMany({
+      where: {
+        id,
+        task: { userId },
+      },
+    });
+
+    if (result.count === 0) {
+      return NextResponse.json({ error: "Subtask not found or unauthorized" }, { status: 404 });
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Subtask DELETE error:", error);

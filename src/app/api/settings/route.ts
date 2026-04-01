@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { UpdateSettingsSchema, formatValidationError } from "@/lib/validations";
+import { auth } from "@/auth";
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId") || "default-user";
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
@@ -23,6 +27,12 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
     const body = await request.json();
 
     const parsed = UpdateSettingsSchema.safeParse(body);
@@ -30,11 +40,10 @@ export async function PATCH(request: Request) {
       return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
     }
 
-    const { name, dayStartTime, dayEndTime, strictMode, userId } = parsed.data;
-    const resolvedUserId = userId || "default-user";
+    const { name, dayStartTime, dayEndTime, strictMode } = parsed.data;
 
     const user = await prisma.user.update({
-      where: { id: resolvedUserId },
+      where: { id: userId },
       data: {
         ...(name !== undefined && { name }),
         ...(dayStartTime !== undefined && { dayStartTime }),

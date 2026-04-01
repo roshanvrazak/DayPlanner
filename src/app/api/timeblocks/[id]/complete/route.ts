@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
 // PATCH mark a timeblock as completed
 export async function PATCH(
@@ -7,7 +8,25 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
     const { id } = await params;
+
+    // Check if block exists and user owns the task
+    const timeBlockExists = await prisma.timeBlock.findFirst({
+      where: {
+        id,
+        task: { userId },
+      },
+      select: { id: true, taskId: true },
+    });
+
+    if (!timeBlockExists) {
+      return NextResponse.json({ error: "TimeBlock not found or unauthorized" }, { status: 404 });
+    }
 
     const timeBlock = await prisma.timeBlock.update({
       where: { id },

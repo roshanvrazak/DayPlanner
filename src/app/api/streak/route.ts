@@ -1,11 +1,15 @@
+import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { calculateStreak } from "@/lib/enforcer";
 
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId") || "default-user";
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
 
+  try {
     const streak = await calculateStreak(userId);
 
     return NextResponse.json({ streak });

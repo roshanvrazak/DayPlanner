@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay, addDays, startOfWeek } from "date-fns";
+import { auth } from "@/auth";
 
 // GET time blocks for a date range (defaults to current week)
 export async function GET(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId") || "default-user";
 
     const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
     const start = searchParams.get("start")

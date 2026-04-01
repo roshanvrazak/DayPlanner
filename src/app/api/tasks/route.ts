@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CreateTaskSchema, formatValidationError } from "@/lib/validations";
+import { auth } from "@/auth";
 
 // GET all tasks for a user
 export async function GET(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId") || "default-user";
     const status = searchParams.get("status");
 
     const tasks = await prisma.task.findMany({
@@ -34,6 +40,12 @@ export async function GET(request: Request) {
 // POST create a new task
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
     const body = await request.json();
     const parsed = CreateTaskSchema.safeParse(body);
 
@@ -41,7 +53,7 @@ export async function POST(request: Request) {
       return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
     }
 
-    const { title, duration, priority, deadline, notes, subtasks, userId } = parsed.data;
+    const { title, duration, priority, deadline, notes, subtasks } = parsed.data;
 
     const task = await prisma.task.create({
       data: {

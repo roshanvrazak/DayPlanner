@@ -1,13 +1,17 @@
+import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay } from "date-fns";
 import { ReviewUpdateSchema, formatValidationError } from "@/lib/validations";
 
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId") || "default-user";
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
 
+  try {
     const now = new Date();
     const blocks = await prisma.timeBlock.findMany({
       where: {
@@ -27,6 +31,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
+
   try {
     const body = await request.json();
 
@@ -37,8 +47,11 @@ export async function POST(request: Request) {
 
     await prisma.$transaction(
       parsed.data.updates.map((u) =>
-        prisma.timeBlock.update({
-          where: { id: u.blockId },
+        prisma.timeBlock.updateMany({
+          where: {
+            id: u.blockId,
+            task: { userId },
+          },
           data: { completed: u.completed },
         })
       )

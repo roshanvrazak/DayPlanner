@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { lockTodayBlocks, isTodayLocked } from "@/lib/enforcer";
+import { auth } from "@/auth";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json().catch(() => ({}));
-    const userId = body.userId || "default-user";
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
 
     const lockedCount = await lockTodayBlocks(userId);
 
@@ -23,8 +27,11 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId") || "default-user";
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
 
     const locked = await isTodayLocked(userId);
 

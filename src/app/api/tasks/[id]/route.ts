@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { UpdateTaskSchema, formatValidationError } from "@/lib/validations";
+import { auth } from "@/auth";
 
 // PATCH update a task
 export async function PATCH(
@@ -8,9 +9,28 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
     const { id } = await params;
-    const body = await request.json();
 
+    // Ensure user owns the task
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+      select: { userId: true },
+    });
+
+    if (!existingTask) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    if (existingTask.userId !== userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const body = await request.json();
     const parsed = UpdateTaskSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
@@ -44,7 +64,27 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
     const { id } = await params;
+
+    // Ensure user owns the task
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+      select: { userId: true },
+    });
+
+    if (!existingTask) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    if (existingTask.userId !== userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     await prisma.task.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {

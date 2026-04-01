@@ -11,9 +11,16 @@ import {
   isBefore,
 } from "date-fns";
 import { AssignTaskSchema, formatValidationError } from "@/lib/validations";
+import { auth } from "@/auth";
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
     const body = await request.json();
 
     const parsed = AssignTaskSchema.safeParse(body);
@@ -21,9 +28,13 @@ export async function POST(request: Request) {
       return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
     }
 
-    const { taskId, date, userId } = parsed.data;
+    const { taskId, date } = parsed.data;
 
-    const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
+    const task = await prisma.task.findUnique({ where: { id: taskId } });
+    if (!task || task.userId !== userId) {
+      return NextResponse.json({ error: "Task not found or unauthorized" }, { status: 404 });
+    }
+
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
     const targetDate = new Date(date);

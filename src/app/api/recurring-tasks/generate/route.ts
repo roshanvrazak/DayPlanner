@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay } from "date-fns";
@@ -5,11 +6,14 @@ import { startOfDay, endOfDay } from "date-fns";
 // POST /api/recurring-tasks/generate
 // For each active recurring task, check if today matches its schedule.
 // If no task instance has been generated yet today, create one in BACKLOG.
-export async function POST(request: Request) {
-  try {
-    const body = await request.json().catch(() => ({}));
-    const userId = body.userId || "default-user";
+export async function POST() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
 
+  try {
     const now = new Date();
     // 0=Monday … 6=Sunday (matching our app convention)
     const todayDow = (now.getDay() + 6) % 7;
