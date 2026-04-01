@@ -13,7 +13,7 @@ export const CreateTaskSchema = z.object({
   deadline: z.string().nullable().optional(),
   notes: z.string().max(2000, "Notes too long").nullable().optional(),
   subtasks: z.array(z.object({ title: z.string().min(1, "Subtask title required").max(200) })).optional().default([]),
-  userId: z.string().optional().default("default-user"),
+  userId: z.string(),
 });
 
 export const UpdateTaskSchema = z.object({
@@ -32,7 +32,7 @@ export const UpdateSettingsSchema = z.object({
   dayStartTime: HHmm.optional(),
   dayEndTime: HHmm.optional(),
   strictMode: z.boolean().optional(),
-  userId: z.string().optional(),
+  userId: z.string(),
 }).refine((data) => {
   if (data.dayStartTime && data.dayEndTime) {
     return data.dayStartTime < data.dayEndTime;
@@ -49,7 +49,7 @@ export const CreateRecurringTaskSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
   recurrenceType: z.enum(["DAILY", "WEEKDAYS", "WEEKLY", "MONTHLY"]),
   recurrenceDays: z.string().nullable().optional(),
-  userId: z.string().optional().default("default-user"),
+  userId: z.string(),
 });
 
 export const UpdateRecurringTaskSchema = z.object({
@@ -64,7 +64,7 @@ export const CreateRecurringBlockSchema = z.object({
   endTime: HHmm,
   daysOfWeek: z.string().regex(/^[0-6](,[0-6])*$/, "Invalid days of week format"),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().optional(),
-  userId: z.string().optional().default("default-user"),
+  userId: z.string(),
 }).refine((data) => data.startTime < data.endTime, {
   message: "Start time must be before end time",
   path: ["endTime"],
@@ -75,7 +75,7 @@ export const CreateRecurringBlockSchema = z.object({
 export const AssignTaskSchema = z.object({
   taskId: z.string().min(1, "Task ID is required"),
   date: z.string().min(1, "Date is required"),
-  userId: z.string().optional().default("default-user"),
+  userId: z.string(),
 });
 
 // ─── Subtask schemas ───────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ export const UpdateSubtaskSchema = z.object({
 
 export const OverrideSchema = z.object({
   confirmationPhrase: z.string().min(1, "Confirmation phrase is required"),
-  userId: z.string().optional().default("default-user"),
+  userId: z.string(),
 });
 
 // ─── Review schemas ────────────────────────────────────────────────────────────
