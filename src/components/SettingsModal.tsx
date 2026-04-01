@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -11,14 +12,17 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ isOpen, onClose, onSave }: SettingsModalProps) {
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+
   const [dayStartTime, setDayStartTime] = useState("09:00");
   const [dayEndTime, setDayEndTime] = useState("17:00");
   const [strictMode, setStrictMode] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      fetch("/api/settings")
+    if (isOpen && userId) {
+      fetch(`/api/settings?userId=${userId}`)
         .then((res) => res.json())
         .then((data) => {
           setDayStartTime(data.dayStartTime || "09:00");
@@ -27,15 +31,16 @@ export default function SettingsModal({ isOpen, onClose, onSave }: SettingsModal
         })
         .catch(console.error);
     }
-  }, [isOpen]);
+  }, [isOpen, userId]);
 
   const handleSave = async () => {
+    if (!userId) return;
     setSaving(true);
     try {
       await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dayStartTime, dayEndTime, strictMode }),
+        body: JSON.stringify({ dayStartTime, dayEndTime, strictMode, userId }),
       });
       toast.success("Settings saved");
       onSave();

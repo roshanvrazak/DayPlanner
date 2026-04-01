@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -32,6 +33,9 @@ const RECURRENCE_OPTIONS: { value: RecurrenceType; label: string }[] = [
 ];
 
 export default function RecurringTasksModal({ isOpen, onClose, onSave }: RecurringTasksModalProps) {
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+
   const [tasks, setTasks] = useState<RecurringTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -46,13 +50,14 @@ export default function RecurringTasksModal({ isOpen, onClose, onSave }: Recurri
   const [monthlyDay, setMonthlyDay] = useState("1");
 
   useEffect(() => {
-    if (isOpen) fetchTasks();
-  }, [isOpen]);
+    if (isOpen && userId) fetchTasks();
+  }, [isOpen, userId]);
 
   const fetchTasks = async () => {
+    if (!userId) return;
     setLoading(true);
     try {
-      const res = await fetch("/api/recurring-tasks");
+      const res = await fetch(`/api/recurring-tasks?userId=${userId}`);
       const data = await res.json();
       setTasks(Array.isArray(data) ? data : []);
     } catch {
@@ -64,7 +69,7 @@ export default function RecurringTasksModal({ isOpen, onClose, onSave }: Recurri
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || !userId) return;
 
     let recurrenceDays: string | null = null;
     if (recurrenceType === "WEEKLY") {
@@ -84,7 +89,7 @@ export default function RecurringTasksModal({ isOpen, onClose, onSave }: Recurri
           notes: notes.trim() || null,
           recurrenceType,
           recurrenceDays,
-          userId: "default-user",
+          userId,
         }),
       });
       if (res.ok) {

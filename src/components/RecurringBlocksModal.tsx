@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -26,6 +27,9 @@ export default function RecurringBlocksModal({
   onClose,
   onSave,
 }: RecurringBlocksModalProps) {
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+
   const [blocks, setBlocks] = useState<RecurringBlock[]>([]);
   const [title, setTitle] = useState("");
   const [startTime, setStartTime] = useState("12:00");
@@ -34,13 +38,13 @@ export default function RecurringBlocksModal({
   const [selectedColor, setSelectedColor] = useState(COLORS[1]);
 
   useEffect(() => {
-    if (isOpen) {
-      fetch("/api/recurring-blocks")
+    if (isOpen && userId) {
+      fetch(`/api/recurring-blocks?userId=${userId}`)
         .then((res) => res.json())
         .then((data) => setBlocks(Array.isArray(data) ? data : []))
         .catch(console.error);
     }
-  }, [isOpen]);
+  }, [isOpen, userId]);
 
   const toggleDay = (day: number) => {
     setSelectedDays((prev) =>
@@ -49,7 +53,7 @@ export default function RecurringBlocksModal({
   };
 
   const handleAdd = async () => {
-    if (!title.trim() || selectedDays.length === 0) return;
+    if (!title.trim() || selectedDays.length === 0 || !userId) return;
 
     try {
       const res = await fetch("/api/recurring-blocks", {
@@ -61,6 +65,7 @@ export default function RecurringBlocksModal({
           endTime,
           daysOfWeek: selectedDays.sort().join(","),
           color: selectedColor,
+          userId,
         }),
       });
 

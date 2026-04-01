@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import {
@@ -32,6 +33,7 @@ import RecurringTasksModal from "@/components/RecurringTasksModal";
 import OverrideModal from "@/components/OverrideModal";
 import ReviewModal from "@/components/ReviewModal";
 import DraggableTaskOverlay from "@/components/DragOverlay";
+import UserMenu from "@/components/UserMenu";
 
 type ViewMode = "daily" | "weekly" | "monthly";
 
@@ -72,6 +74,7 @@ interface RecurringBlock {
 }
 
 export default function Home() {
+  const { data: session, status } = useSession();
   const [backlogTasks, setBacklogTasks] = useState<Task[]>([]);
   const [timeBlocks, setTimeBlocks] = useState<TimeBlockWithTask[]>([]);
   const [recurringBlocks, setRecurringBlocks] = useState<RecurringBlock[]>([]);
@@ -136,21 +139,32 @@ export default function Home() {
 
   // Fetch all data
   const fetchData = useCallback(async (isInitialLoad = false) => {
+    if (status !== "authenticated" || !session?.user?.id) return;
+
     try {
+      const userId = session.user.id;
       // On initial load: roll over yesterday's incomplete tasks and generate recurring task instances
       if (isInitialLoad) {
         await Promise.all([
-          fetch("/api/rollover", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: "default-user" }) }),
-          fetch("/api/recurring-tasks/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: "default-user" }) }),
+          fetch("/api/rollover", { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify({ userId }) 
+          }),
+          fetch("/api/recurring-tasks/generate", { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify({ userId }) 
+          }),
         ]);
       }
 
       const [tasksRes, blocksRes, lockRes, streakRes, recurringRes] = await Promise.all([
-        fetch("/api/tasks?status=BACKLOG"),
-        fetch("/api/timeblocks"),
-        fetch("/api/lock"),
-        fetch("/api/streak"),
-        fetch("/api/recurring-blocks"),
+        fetch(`/api/tasks?userId=${userId}&status=BACKLOG`),
+        fetch(`/api/timeblocks?userId=${userId}`),
+        fetch(`/api/lock?userId=${userId}`),
+        fetch(`/api/streak?userId=${userId}`),
+        fetch(`/api/recurring-blocks?userId=${userId}`),
       ]);
 
       const tasks = await tasksRes.json();
@@ -170,21 +184,24 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [session?.user?.id, status]);
 
   useEffect(() => {
-    fetchData(true);
-  }, [fetchData]);
+    if (status === "authenticated") {
+      fetchData(true);
+    }
+  }, [fetchData, status]);
 
   // Schedule tasks
   const handlePlanWeek = async () => {
+    if (!session?.user?.id) return;
     setIsScheduling(true);
     const toastId = toast.loading("Planning your week...");
     try {
       const res = await fetch("/api/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: "default-user" }),
+        body: JSON.stringify({ userId: session.user.id }),
       });
       const data = await res.json();
       if (data.success) {
@@ -210,13 +227,14 @@ export default function Home() {
     notes: string;
     subtasks: { title: string }[];
   }) => {
+    if (!session?.user?.id) return;
     try {
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...task,
-          userId: "default-user",
+          userId: session.user.id,
           deadline: task.deadline || null,
           notes: task.notes || null,
         }),
@@ -236,9 +254,10 @@ export default function Home() {
 
   // Delete task
   const handleDeleteTask = async (id: string) => {
+    if (!session?.user?.id) return;
     const task = backlogTasks.find((t) => t.id === id);
     try {
-      const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/tasks/${id}?userId=${session.user.id}`, { method: "DELETE" });
       if (res.ok) {
         setBacklogTasks((prev) => prev.filter((t) => t.id !== id));
         toast.success(`"${task?.title ?? "Task"}" deleted`);
@@ -253,8 +272,9 @@ export default function Home() {
 
   // Complete a time block
   const handleComplete = async (blockId: string) => {
+    if (!session?.user?.id) return;
     try {
-      const res = await fetch(`/api/timeblocks/${blockId}/complete`, { method: "PATCH" });
+      const res = await fetch(`/api/timeblocks/${blockId}/complete?userId=${session.user.id}`, { method: "PATCH" });
       if (res.ok) {
         setTimeBlocks((prev) =>
           prev.map((b) => (b.id === blockId ? { ...b, completed: true } : b))
@@ -289,6 +309,7 @@ export default function Home() {
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (!session?.user?.id) return;
     const task = activeDragTask;
     setActiveDragTask(null);
     const { active, over } = event;
@@ -297,7 +318,11 @@ export default function Home() {
       const res = await fetch("/api/timeblocks/assign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskId: active.id, date: over.id }),
+        body: JSON.stringify({ 
+          taskId: active.id, 
+          date: over.id,
+          userId: session.user.id
+        }),
       });
       if (res.ok) {
         await fetchData();
@@ -339,25 +364,6 @@ export default function Home() {
         <h1 className="text-2xl font-bold text-stone-800 tracking-tight">DayPlanner</h1>
 
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          {streak > 0 && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 300 }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-100"
-            >
-              <span className="text-sm">🔥</span>
-              <span className="text-xs font-semibold text-amber-700">{streak}</span>
-            </motion.div>
-          )}
-
-          <div className="text-xs text-stone-400">
-            <span className="font-semibold text-stone-600">
-              {timeBlocks.filter((b) => b.completed).length}
-            </span>
-            /{timeBlocks.length} done
-          </div>
-
           {todayLocked && (
             <button
               onClick={() => setShowOverride(true)}
@@ -407,7 +413,7 @@ export default function Home() {
           <button
             onClick={() => setShowSettings(true)}
             className="w-8 h-8 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-400
-                       hover:text-stone-600 flex items-center justify-center transition-colors duration-200"
+                       hover:text-stone-600 flex items-center justify-center transition-colors duration-200 mr-1"
             title="Settings"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -415,6 +421,12 @@ export default function Home() {
               <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
             </svg>
           </button>
+
+          <UserMenu 
+            streak={streak} 
+            completedCount={timeBlocks.filter(b => b.completed).length} 
+            totalCount={timeBlocks.length} 
+          />
         </div>
       </motion.header>
 
