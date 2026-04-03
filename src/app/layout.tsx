@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SessionProvider } from "next-auth/react";
 import { Toaster } from "sonner";
+import Providers from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -30,8 +31,10 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen antialiased">
         <SessionProvider>
-          {children}
-          <Toaster position="bottom-right" richColors closeButton />
+          <Providers>
+            {children}
+            <Toaster position="bottom-right" richColors closeButton />
+          </Providers>
         </SessionProvider>
       </body>
     </html>

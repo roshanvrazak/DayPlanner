@@ -33,6 +33,7 @@ model User {
   dayStartTime    String           @default("09:00") // HH:mm format
   dayEndTime      String           @default("17:00") // HH:mm format
   strictMode      Boolean          @default(true)
+  overridePhrase  String           @default("OVERRIDE")
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   tasks           Task[]

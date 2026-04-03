@@ -14,13 +14,21 @@ export async function DELETE(
 
   try {
     const { id } = await params;
-    // Ensure the block belongs to the user
-    await prisma.recurringBlock.delete({
-      where: {
-        id,
-        userId,
-      },
+
+    const existing = await prisma.recurringBlock.findUnique({
+      where: { id },
+      select: { userId: true },
     });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Recurring block not found" }, { status: 404 });
+    }
+
+    if (existing.userId !== userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    await prisma.recurringBlock.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("RecurringBlock DELETE error:", error);

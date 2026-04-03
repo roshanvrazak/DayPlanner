@@ -16,13 +16,21 @@ export async function DELETE(
 
   try {
     const { id } = await params;
-    // Ensure the task belongs to the user
-    await prisma.recurringTask.delete({
-      where: {
-        id,
-        userId,
-      },
+
+    const existing = await prisma.recurringTask.findUnique({
+      where: { id },
+      select: { userId: true },
     });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Recurring task not found" }, { status: 404 });
+    }
+
+    if (existing.userId !== userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    await prisma.recurringTask.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("RecurringTask DELETE error:", error);
@@ -43,19 +51,28 @@ export async function PATCH(
 
   try {
     const { id } = await params;
-    const body = await request.json();
 
+    const existing = await prisma.recurringTask.findUnique({
+      where: { id },
+      select: { userId: true },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Recurring task not found" }, { status: 404 });
+    }
+
+    if (existing.userId !== userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const body = await request.json();
     const parsed = UpdateRecurringTaskSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(formatValidationError(parsed.error), { status: 422 });
     }
 
-    // Ensure the task belongs to the user
     const task = await prisma.recurringTask.update({
-      where: {
-        id,
-        userId,
-      },
+      where: { id },
       data: { isActive: parsed.data.isActive },
     });
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { toast } from "sonner";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useSession, signOut } from "next-auth/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   addDays,
@@ -20,71 +21,81 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+
+import {
+  useTasks,
+  useTimeBlocks,
+  useRecurringBlocks,
+  useStreak,
+  useLockStatus,
+  queryKeys,
+  type Task,
+  type Subtask,
+} from "@/hooks/queries";
+import {
+  useCreateTask,
+  useDeleteTask,
+  useSchedule,
+  useCompleteBlock,
+  useRollover,
+  useGenerateRecurring,
+  useAssignTask,
+} from "@/hooks/mutations";
+
 import WeeklyView from "@/components/WeeklyView";
 import DailyView from "@/components/DailyView";
 import MonthlyView from "@/components/MonthlyView";
 import BacklogSidebar from "@/components/BacklogSidebar";
-import FocusMode from "@/components/FocusMode";
-import AddTaskModal from "@/components/AddTaskModal";
-import SettingsModal from "@/components/SettingsModal";
-import RecurringBlocksModal from "@/components/RecurringBlocksModal";
-import RecurringTasksModal from "@/components/RecurringTasksModal";
-import OverrideModal from "@/components/OverrideModal";
-import ReviewModal from "@/components/ReviewModal";
 import DraggableTaskOverlay from "@/components/DragOverlay";
+
+// Modals are never needed on initial render — lazy-load to keep the initial bundle small
+const FocusMode = lazy(() => import("@/components/FocusMode"));
+const AddTaskModal = lazy(() => import("@/components/AddTaskModal"));
+const SettingsModal = lazy(() => import("@/components/SettingsModal"));
+const RecurringBlocksModal = lazy(() => import("@/components/RecurringBlocksModal"));
+const RecurringTasksModal = lazy(() => import("@/components/RecurringTasksModal"));
+const OverrideModal = lazy(() => import("@/components/OverrideModal"));
+const ReviewModal = lazy(() => import("@/components/ReviewModal"));
 
 type ViewMode = "daily" | "weekly" | "monthly";
 
-interface Subtask {
-  id: string;
-  title: string;
-  completed: boolean;
-}
-
-interface Task {
-  id: string;
-  title: string;
-  duration: number;
-  priority: number;
-  deadline: string | null;
-  notes: string | null;
-  status: string;
-  subtasks: Subtask[];
-}
-
-interface TimeBlockWithTask {
-  id: string;
-  taskId: string;
-  startTime: string;
-  endTime: string;
-  isLocked: boolean;
-  completed: boolean;
-  task: Task;
-}
-
-interface RecurringBlock {
-  id: string;
-  title: string;
-  startTime: string;
-  endTime: string;
-  daysOfWeek: string;
-  color: string | null;
-}
-
 export default function Home() {
-  const [backlogTasks, setBacklogTasks] = useState<Task[]>([]);
-  const [timeBlocks, setTimeBlocks] = useState<TimeBlockWithTask[]>([]);
-  const [recurringBlocks, setRecurringBlocks] = useState<RecurringBlock[]>([]);
-  const [isScheduling, setIsScheduling] = useState(false);
-  const [todayLocked, setTodayLocked] = useState(false);
-  const [streak, setStreak] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const { data: session } = useSession();
+  const qc = useQueryClient();
 
-  // View state
+  // ── Server state (via React Query) ──────────────────────────────────────
+  const { data: backlogTasks = [], isLoading: tasksLoading } = useTasks("BACKLOG");
+  const { data: timeBlocks = [], isLoading: blocksLoading } = useTimeBlocks();
+  const { data: recurringBlocks = [] } = useRecurringBlocks();
+  const { data: streakData } = useStreak();
+  const { data: lockData } = useLockStatus();
+
+  const streak = streakData?.streak ?? 0;
+  const todayLocked = lockData?.locked ?? false;
+  const loading = tasksLoading || blocksLoading;
+
+  // ── Mutations ────────────────────────────────────────────────────────────
+  const createTask = useCreateTask();
+  const deleteTask = useDeleteTask();
+  const schedule = useSchedule();
+  const completeBlock = useCompleteBlock();
+  const rollover = useRollover();
+  const generateRecurring = useGenerateRecurring();
+  const assignTask = useAssignTask();
+
+  // ── Initial load: rollover + generate recurring (once per mount) ─────────
+  const initialised = useRef(false);
+  useEffect(() => {
+    if (initialised.current) return;
+    initialised.current = true;
+    rollover.mutate();
+    generateRecurring.mutate();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── UI state ─────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<ViewMode>("weekly");
   const [selectedDate, setSelectedDate] = useState(new Date());
 
-  // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showRecurringBlocks, setShowRecurringBlocks] = useState(false);
@@ -108,11 +119,11 @@ export default function Home() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  // Derived date values
+  // ── Derived date values ───────────────────────────────────────────────────
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-  // Navigation
+  // ── Navigation ────────────────────────────────────────────────────────────
   const navigatePrev = () => {
     if (viewMode === "daily") setSelectedDate((d) => subDays(d, 1));
     else if (viewMode === "weekly") setSelectedDate((d) => subDays(d, 7));
@@ -134,75 +145,8 @@ export default function Home() {
     return format(selectedDate, "MMMM yyyy");
   };
 
-  // Fetch all data
-  const fetchData = useCallback(async (isInitialLoad = false) => {
-    try {
-      // On initial load: roll over yesterday's incomplete tasks and generate recurring task instances
-      if (isInitialLoad) {
-        await Promise.all([
-          fetch("/api/rollover", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: "default-user" }) }),
-          fetch("/api/recurring-tasks/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: "default-user" }) }),
-        ]);
-      }
-
-      const [tasksRes, blocksRes, lockRes, streakRes, recurringRes] = await Promise.all([
-        fetch("/api/tasks?status=BACKLOG"),
-        fetch("/api/timeblocks"),
-        fetch("/api/lock"),
-        fetch("/api/streak"),
-        fetch("/api/recurring-blocks"),
-      ]);
-
-      const tasks = await tasksRes.json();
-      const blocks = await blocksRes.json();
-      const lockData = await lockRes.json();
-      const streakData = await streakRes.json();
-      const recurring = await recurringRes.json();
-
-      setBacklogTasks(Array.isArray(tasks) ? tasks : []);
-      setTimeBlocks(Array.isArray(blocks) ? blocks : []);
-      setTodayLocked(lockData.locked || false);
-      setStreak(streakData.streak || 0);
-      setRecurringBlocks(Array.isArray(recurring) ? recurring : []);
-    } catch (error) {
-      console.error("Failed to fetch data:", error);
-      toast.error("Failed to load data. Please refresh.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData(true);
-  }, [fetchData]);
-
-  // Schedule tasks
-  const handlePlanWeek = async () => {
-    setIsScheduling(true);
-    const toastId = toast.loading("Planning your week...");
-    try {
-      const res = await fetch("/api/schedule", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: "default-user" }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        await fetchData();
-        toast.success(`Scheduled ${data.blocksCreated} time blocks`, { id: toastId });
-      } else {
-        toast.error(data.error || "Failed to schedule tasks", { id: toastId });
-      }
-    } catch (error) {
-      console.error("Failed to schedule:", error);
-      toast.error("Failed to schedule tasks", { id: toastId });
-    } finally {
-      setIsScheduling(false);
-    }
-  };
-
-  // Add task
-  const handleAddTask = async (task: {
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleAddTask = (task: {
     title: string;
     duration: number;
     priority: number;
@@ -210,66 +154,13 @@ export default function Home() {
     notes: string;
     subtasks: { title: string }[];
   }) => {
-    try {
-      const res = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...task,
-          userId: "default-user",
-          deadline: task.deadline || null,
-          notes: task.notes || null,
-        }),
-      });
-      if (res.ok) {
-        await fetchData();
-        toast.success(`"${task.title}" added to backlog`);
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "Failed to create task");
-      }
-    } catch (error) {
-      console.error("Failed to add task:", error);
-      toast.error("Failed to create task");
-    }
+    createTask.mutate({
+      ...task,
+      deadline: task.deadline || null,
+      notes: task.notes || null,
+    });
   };
 
-  // Delete task
-  const handleDeleteTask = async (id: string) => {
-    const task = backlogTasks.find((t) => t.id === id);
-    try {
-      const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setBacklogTasks((prev) => prev.filter((t) => t.id !== id));
-        toast.success(`"${task?.title ?? "Task"}" deleted`);
-      } else {
-        toast.error("Failed to delete task");
-      }
-    } catch (error) {
-      console.error("Failed to delete task:", error);
-      toast.error("Failed to delete task");
-    }
-  };
-
-  // Complete a time block
-  const handleComplete = async (blockId: string) => {
-    try {
-      const res = await fetch(`/api/timeblocks/${blockId}/complete`, { method: "PATCH" });
-      if (res.ok) {
-        setTimeBlocks((prev) =>
-          prev.map((b) => (b.id === blockId ? { ...b, completed: true } : b))
-        );
-        toast.success("Block marked complete");
-      } else {
-        toast.error("Failed to mark block as complete");
-      }
-    } catch (error) {
-      console.error("Failed to complete block:", error);
-      toast.error("Failed to mark block as complete");
-    }
-  };
-
-  // Focus mode
   const handleFocusClick = (blockId: string | null, title: string, duration: number) => {
     const block = blockId ? timeBlocks.find((b) => b.id === blockId) : null;
     setFocusMode({
@@ -282,36 +173,24 @@ export default function Home() {
     });
   };
 
-  // Drag handlers
   const handleDragStart = (event: DragStartEvent) => {
     const task = backlogTasks.find((t) => t.id === event.active.id);
     if (task) setActiveDragTask(task);
   };
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const task = activeDragTask;
     setActiveDragTask(null);
     const { active, over } = event;
     if (!over) return;
-    try {
-      const res = await fetch("/api/timeblocks/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskId: active.id, date: over.id }),
-      });
-      if (res.ok) {
-        await fetchData();
-        toast.success(`"${task?.title ?? "Task"}" scheduled`);
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "No available slot on this day");
-      }
-    } catch (error) {
-      console.error("Failed to assign task:", error);
-      toast.error("Failed to assign task");
-    }
+    assignTask.mutate({
+      taskId: String(active.id),
+      date: String(over.id),
+      taskTitle: task?.title,
+    });
   };
 
+  // ── Loading screen ────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -339,6 +218,28 @@ export default function Home() {
         <h1 className="text-2xl font-bold text-stone-800 tracking-tight">DayPlanner</h1>
 
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {session?.user && (
+            <div className="flex items-center gap-2">
+              <div
+                className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center
+                           text-xs font-bold uppercase select-none"
+                title={session.user.name || session.user.email || ""}
+              >
+                {(session.user.name || session.user.email || "?").slice(0, 2)}
+              </div>
+              <span className="text-xs font-medium text-stone-600 hidden sm:inline max-w-[100px] truncate">
+                {session.user.name || session.user.email}
+              </span>
+              <button
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="px-2 py-1 rounded-lg text-[11px] font-semibold text-stone-400 hover:text-stone-600
+                           hover:bg-stone-100 transition-colors duration-200"
+              >
+                Logout
+              </button>
+            </div>
+          )}
+
           {streak > 0 && (
             <motion.div
               initial={{ scale: 0 }}
@@ -425,7 +326,6 @@ export default function Home() {
         transition={{ delay: 0.15, duration: 0.4 }}
         className="flex items-center justify-between mb-4 gap-3 flex-wrap"
       >
-        {/* Period navigation */}
         <div className="flex items-center gap-1.5">
           <button
             onClick={navigatePrev}
@@ -460,7 +360,6 @@ export default function Home() {
           </button>
         </div>
 
-        {/* View mode switcher */}
         <div className="flex items-center gap-0.5 bg-stone-100 rounded-xl p-1">
           {(["daily", "weekly", "monthly"] as ViewMode[]).map((mode) => (
             <button
@@ -482,7 +381,6 @@ export default function Home() {
       {/* Main content */}
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
-          {/* View area */}
           {viewMode === "weekly" && (
             <WeeklyView
               days={days}
@@ -490,7 +388,7 @@ export default function Home() {
               recurringBlocks={recurringBlocks}
               todayLocked={todayLocked}
               onFocusClick={handleFocusClick}
-              onComplete={handleComplete}
+              onComplete={(id) => completeBlock.mutate(id)}
             />
           )}
 
@@ -501,7 +399,7 @@ export default function Home() {
               recurringBlocks={recurringBlocks}
               todayLocked={todayLocked}
               onFocusClick={handleFocusClick}
-              onComplete={handleComplete}
+              onComplete={(id) => completeBlock.mutate(id)}
             />
           )}
 
@@ -516,30 +414,28 @@ export default function Home() {
             />
           )}
 
-          {/* Backlog sidebar */}
           <BacklogSidebar
             tasks={backlogTasks}
-            isScheduling={isScheduling}
+            isScheduling={schedule.isPending}
             streak={streak}
             isCollapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-            onPlanWeek={handlePlanWeek}
+            onPlanWeek={() => schedule.mutate()}
             onAddTask={() => setShowAddModal(true)}
-            onDeleteTask={handleDeleteTask}
+            onDeleteTask={(id) => deleteTask.mutate(id)}
             draggable
           />
 
-          {/* Mobile: Plan + Add buttons */}
           <div className="flex gap-2 lg:hidden">
             <motion.button
               whileTap={{ scale: 0.98 }}
-              onClick={handlePlanWeek}
-              disabled={isScheduling || backlogTasks.length === 0}
+              onClick={() => schedule.mutate()}
+              disabled={schedule.isPending || backlogTasks.length === 0}
               className="flex-1 py-3 rounded-xl text-sm font-semibold
                          bg-gradient-to-r from-violet-500 to-purple-500 text-white
                          shadow-lg shadow-violet-200/50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isScheduling ? "Planning..." : "Plan My Week"}
+              {schedule.isPending ? "Planning..." : "Plan My Week"}
             </motion.button>
             <button
               onClick={() => setShowAddModal(true)}
@@ -559,7 +455,8 @@ export default function Home() {
         </DragOverlay>
       </DndContext>
 
-      {/* Modals */}
+      {/* Modals — lazy-loaded, so wrap in a single Suspense boundary */}
+      <Suspense fallback={null}>
       <AddTaskModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onAdd={handleAddTask} />
 
       <FocusMode
@@ -572,22 +469,41 @@ export default function Home() {
         onClose={() =>
           setFocusMode({ isOpen: false, blockId: null, taskTitle: "", duration: 0, notes: null, subtasks: [] })
         }
-        onComplete={handleComplete}
+        onComplete={(id) => completeBlock.mutate(id)}
       />
 
-      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} onSave={fetchData} />
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        onSave={() => qc.invalidateQueries({ queryKey: queryKeys.settings() })}
+      />
       <RecurringBlocksModal
         isOpen={showRecurringBlocks}
         onClose={() => setShowRecurringBlocks(false)}
-        onSave={fetchData}
+        onSave={() => qc.invalidateQueries({ queryKey: queryKeys.recurringBlocks() })}
       />
       <RecurringTasksModal
         isOpen={showRecurringTasks}
         onClose={() => setShowRecurringTasks(false)}
-        onSave={fetchData}
+        onSave={() => qc.invalidateQueries({ queryKey: queryKeys.tasks() })}
       />
-      <OverrideModal isOpen={showOverride} onClose={() => setShowOverride(false)} onOverride={fetchData} />
-      <ReviewModal isOpen={showReview} onClose={() => setShowReview(false)} onSave={fetchData} />
+      <OverrideModal
+        isOpen={showOverride}
+        onClose={() => setShowOverride(false)}
+        onOverride={() => {
+          qc.invalidateQueries({ queryKey: queryKeys.lock() });
+          qc.invalidateQueries({ queryKey: queryKeys.timeblocks() });
+        }}
+      />
+      <ReviewModal
+        isOpen={showReview}
+        onClose={() => setShowReview(false)}
+        onSave={() => {
+          qc.invalidateQueries({ queryKey: queryKeys.timeblocks() });
+          qc.invalidateQueries({ queryKey: queryKeys.tasks() });
+        }}
+      />
+      </Suspense>
     </div>
   );
 }

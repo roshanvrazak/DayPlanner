@@ -13,15 +13,32 @@ vi.mock("framer-motion", () => ({
 
 import OverrideModal from "@/components/OverrideModal";
 
+const TEST_PHRASE = "DELTA-STORM-42-ECHO";
+
 const defaultProps = {
   isOpen: true,
   onClose: vi.fn(),
   onOverride: vi.fn(),
 };
 
+function mockSettingsFetch() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/settings") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ overridePhrase: TEST_PHRASE }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    })
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubGlobal("fetch", vi.fn());
+  mockSettingsFetch();
 });
 
 describe("OverrideModal", () => {
@@ -35,50 +52,65 @@ describe("OverrideModal", () => {
     expect(screen.queryByText("Emergency Override")).toBeNull();
   });
 
-  it("unlock button is disabled by default", () => {
+  it("unlock button is disabled by default", async () => {
     render(<OverrideModal {...defaultProps} />);
+    await waitFor(() => screen.getByPlaceholderText(TEST_PHRASE));
     const btn = screen.getByText("Unlock Schedule");
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("unlock button remains disabled with wrong phrase", () => {
+  it("unlock button remains disabled with wrong phrase", async () => {
     render(<OverrideModal {...defaultProps} />);
-    const input = screen.getByPlaceholderText("BREAK MY STREAK");
+    const input = await waitFor(() => screen.getByPlaceholderText(TEST_PHRASE));
     fireEvent.change(input, { target: { value: "WRONG PHRASE" } });
     const btn = screen.getByText("Unlock Schedule");
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("unlock button enabled with correct phrase", () => {
+  it("unlock button enabled with correct phrase", async () => {
     render(<OverrideModal {...defaultProps} />);
-    const input = screen.getByPlaceholderText("BREAK MY STREAK");
-    fireEvent.change(input, { target: { value: "BREAK MY STREAK" } });
+    const input = await waitFor(() => screen.getByPlaceholderText(TEST_PHRASE));
+    fireEvent.change(input, { target: { value: TEST_PHRASE } });
     const btn = screen.getByText("Unlock Schedule");
     expect((btn as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("auto-uppercases input", () => {
+  it("auto-uppercases input", async () => {
     render(<OverrideModal {...defaultProps} />);
-    const input = screen.getByPlaceholderText("BREAK MY STREAK") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "break my streak" } });
-    expect(input.value).toBe("BREAK MY STREAK");
+    const input = (await waitFor(() =>
+      screen.getByPlaceholderText(TEST_PHRASE)
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "delta-storm-42-echo" } });
+    expect(input.value).toBe("DELTA-STORM-42-ECHO");
   });
 
-  it("calls onClose when Cancel is clicked", () => {
+  it("calls onClose when Cancel is clicked", async () => {
     render(<OverrideModal {...defaultProps} />);
+    await waitFor(() => screen.getByPlaceholderText(TEST_PHRASE));
     fireEvent.click(screen.getByText("Cancel"));
     expect(defaultProps.onClose).toHaveBeenCalledOnce();
   });
 
   it("calls onOverride and onClose on successful submit", async () => {
-    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true, unlockedCount: 3 }),
-    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url === "/api/settings") {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ overridePhrase: TEST_PHRASE }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, unlockedCount: 3 }),
+        });
+      })
+    );
 
     render(<OverrideModal {...defaultProps} />);
-    const input = screen.getByPlaceholderText("BREAK MY STREAK");
-    fireEvent.change(input, { target: { value: "BREAK MY STREAK" } });
+    const input = await waitFor(() => screen.getByPlaceholderText(TEST_PHRASE));
+    fireEvent.change(input, { target: { value: TEST_PHRASE } });
     fireEvent.submit(input.closest("form")!);
 
     await waitFor(() => {
@@ -88,14 +120,25 @@ describe("OverrideModal", () => {
   });
 
   it("shows error message when API returns non-ok response", async () => {
-    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: "Incorrect phrase" }),
-    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url === "/api/settings") {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ overridePhrase: TEST_PHRASE }),
+          });
+        }
+        return Promise.resolve({
+          ok: false,
+          json: async () => ({ error: "Incorrect phrase" }),
+        });
+      })
+    );
 
     render(<OverrideModal {...defaultProps} />);
-    const input = screen.getByPlaceholderText("BREAK MY STREAK");
-    fireEvent.change(input, { target: { value: "BREAK MY STREAK" } });
+    const input = await waitFor(() => screen.getByPlaceholderText(TEST_PHRASE));
+    fireEvent.change(input, { target: { value: TEST_PHRASE } });
     fireEvent.submit(input.closest("form")!);
 
     await waitFor(() => {
@@ -104,12 +147,23 @@ describe("OverrideModal", () => {
     expect(defaultProps.onOverride).not.toHaveBeenCalled();
   });
 
-  it("shows fallback error on fetch failure", async () => {
-    (fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("Network error"));
+  it("shows fallback error on fetch failure for override call", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url === "/api/settings") {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ overridePhrase: TEST_PHRASE }),
+          });
+        }
+        return Promise.reject(new Error("Network error"));
+      })
+    );
 
     render(<OverrideModal {...defaultProps} />);
-    const input = screen.getByPlaceholderText("BREAK MY STREAK");
-    fireEvent.change(input, { target: { value: "BREAK MY STREAK" } });
+    const input = await waitFor(() => screen.getByPlaceholderText(TEST_PHRASE));
+    fireEvent.change(input, { target: { value: TEST_PHRASE } });
     fireEvent.submit(input.closest("form")!);
 
     await waitFor(() => {

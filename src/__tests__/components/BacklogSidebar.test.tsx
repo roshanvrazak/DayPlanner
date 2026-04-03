@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 
 vi.mock("framer-motion", () => ({
   motion: {
@@ -67,19 +67,25 @@ describe("BacklogSidebar", () => {
   });
 
   it("filters tasks based on search query", () => {
+    vi.useFakeTimers();
     render(<BacklogSidebar {...defaultProps} />);
     const searchInput = screen.getByPlaceholderText("Search tasks...");
     fireEvent.change(searchInput, { target: { value: "write" } });
+    act(() => vi.advanceTimersByTime(300));
     expect(screen.getByText("Write tests")).toBeDefined();
     expect(screen.queryByText("Review PR")).toBeNull();
     expect(screen.queryByText("Deploy app")).toBeNull();
+    vi.useRealTimers();
   });
 
   it("shows no-match empty state when search has no results", () => {
+    vi.useFakeTimers();
     render(<BacklogSidebar {...defaultProps} />);
     const searchInput = screen.getByPlaceholderText("Search tasks...");
     fireEvent.change(searchInput, { target: { value: "xyz no match" } });
+    act(() => vi.advanceTimersByTime(300));
     expect(screen.getByText("No tasks match")).toBeDefined();
+    vi.useRealTimers();
   });
 
   it("shows empty backlog state when no tasks", () => {

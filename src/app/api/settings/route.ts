@@ -18,6 +18,7 @@ export async function GET(request: Request) {
       dayStartTime: user.dayStartTime,
       dayEndTime: user.dayEndTime,
       strictMode: user.strictMode,
+      overridePhrase: user.overridePhrase,
     });
   } catch (error) {
     console.error("Settings GET error:", error);

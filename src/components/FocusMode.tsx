@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface Subtask {
@@ -20,6 +20,15 @@ interface FocusModeProps {
   onComplete: (blockId: string) => void;
 }
 
+const radius = 120;
+const circumference = 2 * Math.PI * radius;
+
+function formatTime(totalSeconds: number) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
 export default function FocusMode({
   isOpen,
   blockId,
@@ -30,48 +39,53 @@ export default function FocusMode({
   onClose,
   onComplete,
 }: FocusModeProps) {
-  const [secondsLeft, setSecondsLeft] = useState(durationMinutes * 60);
   const [isRunning, setIsRunning] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [localSubtasks, setLocalSubtasks] = useState<Subtask[]>(subtasks);
 
-  // Reset timer only when switching to a different task (blockId changes).
-  // Re-opening the same task preserves the timer state.
+  // Refs for direct DOM mutation — avoids a full re-render every second
+  const secondsRef = useRef(durationMinutes * 60);
+  const timerDisplayRef = useRef<HTMLSpanElement>(null);
+  const circleRef = useRef<SVGCircleElement>(null);
+
+  // Reset whenever switching to a different task
   useEffect(() => {
-    setSecondsLeft(durationMinutes * 60);
+    const total = durationMinutes * 60;
+    secondsRef.current = total;
     setIsRunning(false);
     setIsCompleted(false);
     setLocalSubtasks(subtasks);
+    if (timerDisplayRef.current) timerDisplayRef.current.textContent = formatTime(total);
+    if (circleRef.current) circleRef.current.style.strokeDashoffset = String(circumference);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blockId]);
 
-  // Countdown logic
+  // Countdown: update DOM directly each tick — no setState, no re-render
   useEffect(() => {
-    if (!isRunning || secondsLeft <= 0) return;
+    if (!isRunning) return;
 
     const interval = setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          setIsRunning(false);
-          setIsCompleted(true);
-          return 0;
-        }
-        return prev - 1;
-      });
+      secondsRef.current -= 1;
+      const s = secondsRef.current;
+
+      if (timerDisplayRef.current) {
+        timerDisplayRef.current.textContent = formatTime(s);
+      }
+      if (circleRef.current) {
+        const total = durationMinutes * 60;
+        const progress = total > 0 ? (total - s) / total : 1;
+        circleRef.current.style.strokeDashoffset = String(circumference * (1 - progress));
+      }
+
+      if (s <= 0) {
+        clearInterval(interval);
+        setIsRunning(false);
+        setIsCompleted(true);
+      }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isRunning, secondsLeft]);
-
-  const totalSeconds = durationMinutes * 60;
-  const progress = totalSeconds > 0 ? (totalSeconds - secondsLeft) / totalSeconds : 0;
-  const minutes = Math.floor(secondsLeft / 60);
-  const seconds = secondsLeft % 60;
-
-  // SVG circle
-  const radius = 120;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference * (1 - progress);
+  }, [isRunning, durationMinutes]);
 
   const handleComplete = useCallback(() => {
     if (blockId) onComplete(blockId);
@@ -93,8 +107,7 @@ export default function FocusMode({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ completed: newCompleted }),
       });
-    } catch (error) {
-      console.error("Failed to toggle subtask:", error);
+    } catch {
       setLocalSubtasks((prev) =>
         prev.map((s) => (s.id === subtaskId ? { ...s, completed: !newCompleted } : s))
       );
@@ -178,25 +191,23 @@ export default function FocusMode({
             transition={{ delay: 0.2, duration: 0.5 }}
             className="relative w-56 h-56 mx-auto mb-6"
           >
-            <svg
-              className="w-full h-full transform -rotate-90"
-              viewBox="0 0 280 280"
-            >
+            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 280 280">
               <circle cx="140" cy="140" r={radius} fill="none" stroke="#F5F5F4" strokeWidth="6" />
               <circle
+                ref={circleRef}
                 cx="140"
                 cy="140"
                 r={radius}
                 fill="none"
-                stroke="url(#gradient)"
+                stroke="url(#timerGradient)"
                 strokeWidth="6"
                 strokeLinecap="round"
                 strokeDasharray={circumference}
-                strokeDashoffset={strokeDashoffset}
-                className="transition-all duration-1000 ease-linear"
+                strokeDashoffset={circumference}
+                style={{ transition: "stroke-dashoffset 1s linear" }}
               />
               <defs>
-                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <linearGradient id="timerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#8B5CF6" />
                   <stop offset="100%" stopColor="#A78BFA" />
                 </linearGradient>
@@ -205,11 +216,12 @@ export default function FocusMode({
 
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span
+                ref={timerDisplayRef}
                 className={`text-5xl font-light tabular-nums tracking-tight ${
                   isCompleted ? "text-emerald-500" : "text-stone-800"
                 }`}
               >
-                {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+                {formatTime(durationMinutes * 60)}
               </span>
               <span className="text-xs text-stone-400 mt-2">
                 {isCompleted
@@ -274,11 +286,11 @@ export default function FocusMode({
             transition={{ delay: 0.3 }}
             className="flex gap-3 justify-center"
           >
-            {!isCompleted ? (
+            {!isCompleted && (
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={() => setIsRunning(!isRunning)}
+                onClick={() => setIsRunning((r) => !r)}
                 className={`
                   px-8 py-3 rounded-xl text-sm font-semibold transition-all duration-300
                   ${
@@ -290,7 +302,7 @@ export default function FocusMode({
               >
                 {isRunning ? "Pause" : "Start"}
               </motion.button>
-            ) : null}
+            )}
 
             <motion.button
               whileHover={{ scale: 1.03 }}

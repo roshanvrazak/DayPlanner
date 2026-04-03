@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDraggable } from "@dnd-kit/core";
 import TaskCard from "./TaskCard";
+import { useDebounce } from "@/hooks/useDebounce";
 
 function DraggableWrapper({ id, enabled, children }: { id: string; enabled: boolean; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, disabled: !enabled });
@@ -53,9 +54,13 @@ export default function BacklogSidebar({
   draggable,
 }: BacklogSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const filteredTasks = searchQuery.trim()
-    ? tasks.filter((t) => t.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    : tasks;
+  const debouncedSearch = useDebounce(searchQuery, 300);
+
+  const filteredTasks = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    if (!q) return tasks;
+    return tasks.filter((t) => t.title.toLowerCase().includes(q));
+  }, [tasks, debouncedSearch]);
 
   return (
     <motion.aside

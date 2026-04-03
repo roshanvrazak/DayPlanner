@@ -84,7 +84,6 @@ export default function RecurringTasksModal({ isOpen, onClose, onSave }: Recurri
           notes: notes.trim() || null,
           recurrenceType,
           recurrenceDays,
-          userId: "default-user",
         }),
       });
       if (res.ok) {

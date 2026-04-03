@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface OverrideModalProps {
@@ -9,14 +9,24 @@ interface OverrideModalProps {
   onOverride: () => void;
 }
 
-const REQUIRED_PHRASE = "BREAK MY STREAK";
-
 export default function OverrideModal({ isOpen, onClose, onOverride }: OverrideModalProps) {
   const [phrase, setPhrase] = useState("");
+  const [requiredPhrase, setRequiredPhrase] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const isMatch = phrase === REQUIRED_PHRASE;
+  // Fetch the user's override phrase when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.overridePhrase) setRequiredPhrase(data.overridePhrase);
+      })
+      .catch(() => {});
+  }, [isOpen]);
+
+  const isMatch = phrase === requiredPhrase && requiredPhrase.length > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,7 +98,9 @@ export default function OverrideModal({ isOpen, onClose, onOverride }: OverrideM
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider block mb-1.5">
-                  Type &quot;{REQUIRED_PHRASE}&quot; to confirm
+                  {requiredPhrase
+                    ? <>Type &quot;<span className="text-red-400">{requiredPhrase}</span>&quot; to confirm</>
+                    : "Loading your override phrase..."}
                 </label>
                 <input
                   type="text"
@@ -97,13 +109,15 @@ export default function OverrideModal({ isOpen, onClose, onOverride }: OverrideM
                     setPhrase(e.target.value.toUpperCase());
                     setError("");
                   }}
-                  placeholder={REQUIRED_PHRASE}
+                  placeholder={requiredPhrase || "Loading..."}
                   autoFocus
+                  disabled={!requiredPhrase}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200
                              bg-stone-50/50 text-sm text-stone-800 text-center
                              placeholder:text-stone-300 uppercase tracking-wider
                              focus:outline-none focus:ring-2 focus:ring-red-200
-                             focus:border-red-300 transition-all duration-200"
+                             focus:border-red-300 transition-all duration-200
+                             disabled:opacity-50"
                 />
                 {error && (
                   <p className="text-xs text-red-500 mt-1 text-center">{error}</p>

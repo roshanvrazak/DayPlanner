@@ -4,8 +4,6 @@ import { startOfDay, endOfDay } from "date-fns";
 import { OverrideSchema, formatValidationError } from "@/lib/validations";
 import { auth } from "@/auth";
 
-const CONFIRMATION_PHRASE = "BREAK MY STREAK";
-
 export async function POST(request: Request) {
   try {
     const session = await auth();
@@ -23,7 +21,16 @@ export async function POST(request: Request) {
 
     const { confirmationPhrase } = parsed.data;
 
-    if (confirmationPhrase !== CONFIRMATION_PHRASE) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { overridePhrase: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (confirmationPhrase !== user.overridePhrase) {
       return NextResponse.json(
         { error: "Incorrect confirmation phrase" },
         { status: 400 }

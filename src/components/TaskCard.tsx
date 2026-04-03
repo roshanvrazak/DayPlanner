@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 
@@ -25,7 +26,7 @@ const priorityColors: Record<number, { bg: string; border: string; dot: string }
   3: { bg: "bg-stone-100/70", border: "border-stone-200/50", dot: "bg-stone-400" },
 };
 
-export default function TaskCard({
+const TaskCard = memo(function TaskCard({
   id,
   title,
   duration,
@@ -146,4 +147,6 @@ export default function TaskCard({
       )}
     </motion.div>
   );
-}
+});
+
+export default TaskCard;
